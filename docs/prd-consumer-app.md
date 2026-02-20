@@ -1,5 +1,5 @@
 # PRD: Mindfly — Consumer AI Desktop + Browser App
-**Version:** 1.4  
+**Version:** 1.6  
 **Date:** February 19, 2026  
 **Status:** Draft for Review  
 **Owner:** Product  
@@ -255,8 +255,13 @@ Sets `onboardingSeen = true`. Dismisses wizard. Opens Workspace mode.
 ### 6.4 Compose Bar
 - Auto-growing textarea (up to 6 lines, then scrolls)
 - **Model pill** (bottom-left of compose area): shows current model name, tap to switch
-  - Opens a sheet: provider logo + model name + cost tier indicator
-  - Writes `agents.list[0].model` via `config.set`
+  - Opens a **model picker dropdown** (not a full-page sheet): a scrollable list grouped by provider, max 320px wide, anchors above the pill
+  - Each row: provider logo (16px) + model name + cost tier dot (●○○ cheap → ●●● expensive)
+  - Currently selected model has a checkmark
+  - "★ Recommended" badge on the provider's flagship model
+  - Filtering: type-ahead search field at the top of the dropdown
+  - Selecting a model writes `agents.list[0].model` via `config.set` immediately — takes effect on the next send
+  - Keyboard: `⌘⇧M` opens the model picker (macOS), `Ctrl+Shift+M` (Windows)
 - **Agent pill** (next to model): shows agent name, tap to switch agent / create new
 - **⊕ Attach**: image paste (already implemented), file picker
 - **↑ Send**: `↵` keyboard shortcut on desktop
@@ -267,6 +272,28 @@ Sets `onboardingSeen = true`. Dismisses wizard. Opens Workspace mode.
 - Resizable divider (already implemented in `resizable-divider` component)
 - Contains: markdown render, code view, file diff, image viewer
 - Close button (×) at top right
+
+---
+
+### 6.6 Voice Mode *(Future — see §16)*
+
+Voice interaction is planned but **not in v1 scope**. The intent and UX design are captured here so that UI layout decisions (compose bar, browser panel) account for it from the start.
+
+Mindfly's voice design builds on existing infrastructure in OpenClaw:
+- **macOS:** `TalkModeRuntime` (continuous STT via `SFSpeechRecognizer` + ElevenLabs/system TTS) and `VoiceWakeRuntime` (always-on wake word) are already implemented. Mindfly will surface them as first-class UI.
+- **Windows:** STT via OpenAI Realtime API (`gpt-4o-transcribe`) and TTS via OpenAI `gpt-4o-mini-tts`, both routed through OpenRouter. Wake word via Web Speech API (no API cost for detection).
+
+**Intended interaction modes:**
+
+| Mode | Trigger | Behaviour |
+|------|---------|-----------|
+| **Talk Mode** (reactive) | Mic button in compose bar, or wake word | STT → agent replies → TTS speaks back → resumes listening |
+| **Voice Wake** (always-on) | Wake word (`"mindfly"`, `"hey aria"`, etc.) | Activates Talk Mode instantly from background |
+| **Proactive voice** | Cron, incoming event, idle timer | Agent speaks unprompted — a brief natural utterance, not a notification |
+
+**UI placeholder (v1):** The compose bar has a reserved slot for the mic button (`🎙`) to the left of ↑ Send. In v1 this slot is empty. In v2 it activates Talk Mode.
+
+**Deferred to §16 Future Considerations:** STT/TTS provider selection, Windows voice engine implementation, proactive voice trigger configuration, Settings → Voice section.
 
 ---
 
@@ -303,7 +330,9 @@ Replaces the bottom drawer. A floating, draggable panel that lives over Chrome.
   - **–** minimises to pill
   - **×** closes the panel (no page context is read unless you re-open or explicitly ask)
 - Body: full chat thread — same `OpenClawChatView`, same session as Workspace
-- Footer: compose input `Ask about this page...` + Send
+- Footer: compose input `Ask about this page...` + **[Model pill]** + Send
+  - **Model pill in Browser panel:** identical dropdown to Workspace compose bar (§6.4) — same grouped list, same `config.set` call, takes effect on next send
+  - Changing model in Browser mode changes the same `agents.list[0].model` — it is not a separate browser-only model setting
 - Agent automatically has the `browser` tool enabled (snapshot/screenshot + act/navigate)
 - Panel is **draggable** by its header — user can reposition anywhere on screen
 
@@ -378,6 +407,8 @@ Changes:
 - Permission prompt: `PermissionPromptPanel.swift` (NSPanel, `level: .modalPanel`, always-on-top)
 - Startup: LaunchAgent via existing `GatewayLaunchAgentManager`
 
+**Voice (v2 — future):** `TalkModeRuntime` + `VoiceWakeRuntime` are already implemented on macOS and will be surfaced as first-class UI in v2. No voice UI changes in v1 — the compose bar slot is reserved (§6.6).
+
 ### 9.2 Windows (Phase 1 — 2 weeks, parallel)
 **Current:** WSL2 CLI only. No native Windows app.  
 **Target:** Electron wrapper over the existing Vite+Lit web UI
@@ -439,8 +470,9 @@ Files to create:
 - `apps/windows/package.json` — Electron + electron-builder + keytar
 - `apps/windows/build/` — NSIS installer config, app icons, Windows Firewall rule script
 - `apps/windows/ui/` — Vite+Lit web UI build output (bundled into Electron app at build time)
-
 Shares 100% of the web UI source code (`ui/src/`). A single `vite build` produces the `apps/windows/ui/` bundle. Zero web UI source changes required.
+
+**Voice (v2 — future):** STT via OpenAI Realtime API (`gpt-4o-transcribe`) + TTS via `gpt-4o-mini-tts`, both routed through OpenRouter. Wake word via Web Speech API. Full spec deferred to v2 (§16).
 
 ### 9.3 iOS (Phase 2 — 1 week)
 **Current:** `RootTabs.swift` with Screen / Voice / Settings tabs  
@@ -477,6 +509,7 @@ Settings are accessed via **⚙** in the left rail bottom. Never in top nav. A s
 | Account | My Account | Google identity (sign-in/out), avatar, email display |
 | Apps | Apps & Skills | Skills and plugins — enable/disable, browse full catalog |
 | Channels | Messaging | WhatsApp, Telegram |
+| Voice | Voice & Wake Word | *(v2)* Talk Mode on/off, wake words, TTS voice, proactive settings |
 | Browser | Browser Mode | `browser.enabled`, Chrome profile |
 | Permissions | Permissions | Tool approval history, always-allowed list, approval timeout |
 | Appearance | Look & Feel | theme (dark/light/system), font size |
@@ -504,12 +537,16 @@ This is the full surface for skills and plugins. Not shown during onboarding —
 | 🎵 | Spotify | `spotify-player` skill | OFF |
 | 📋 | Notion | `notion` skill | OFF |
 | 🌤 | Weather | `weather` skill | OFF |
-| 🔊 | Voice | `voice-call` plugin | OFF |
+| 🔊 | Voice | Talk Mode (built-in) | OFF |
 | 📷 | Camera | `camsnap` skill | OFF |
 
 **"Browse all apps →"** at the bottom links to the full browsable catalog (all ~50 bundled skills + extension plugins).
 
 **Advanced** section is collapsed by default. Contains all the current developer-facing tabs (config JSON, logs, debug, cron, nodes). Not hidden — just not the first thing users see.
+
+### Settings → Voice *(v2 — future)*
+
+Voice settings (Talk Mode, wake words, TTS voice, proactive triggers) are deferred to v2. The Settings section slot is reserved but not built in v1. See §16 Future Considerations.
 
 ---
 
@@ -1250,7 +1287,7 @@ Revoking an "Always allowed" entry removes the pattern from `exec-approvals.json
 - Cloud-hosted gateway (all local)
 - iOS Browser mode
 - Plugin marketplace (install from URL is in Advanced)
-- Voice mode changes (existing voice features unchanged)
+- Full voice mode implementation (STT/TTS/wake word/proactive voice — see §6.6 for intent, §16 for roadmap)
 - Paid tier / subscription billing
 - Nostr, Matrix, Zalo, LINE channel setup in onboarding (available in Settings)
 - Multi-device conversation sync (Google identity stored, but sync not implemented in v1)
@@ -1272,6 +1309,71 @@ Revoking an "Always allowed" entry removes the pattern from `exec-approvals.json
 
 ---
 
+## 16.B Future Considerations (v2+)
+
+### 16.B.1 Voice Interaction (STT + TTS + Wake Word + Proactive)
+
+Intent and UX design captured in §6.6. Architecture decided:
+
+| Platform | STT | TTS | Wake word |
+|----------|-----|-----|-----------|
+| macOS | `SFSpeechRecognizer` (on-device) — already in `TalkModeRuntime` | ElevenLabs primary → `AVSpeechSynthesizer` fallback — already in `TalkModeRuntime` | `VoiceWakeRuntime` (macOS 26+) — already exists |
+| Windows | OpenAI Realtime API (`gpt-4o-transcribe`) via OpenRouter | OpenAI `gpt-4o-mini-tts` via OpenRouter, PCM streamed to `AudioContext` | Web Speech API continuous mode with keyword filter (free, local) |
+
+Proactive voice (agent speaks unprompted) triggered by: cron completion, incoming message, configurable idle timer. Implementation: `TalkModeRuntime.speakProactive()` entry point (macOS) + `voice-engine.ts` in Electron renderer (Windows).
+
+Settings → Voice section (deferred): Talk Mode toggle, wake words, TTS voice picker, proactive trigger config, mic permission state.
+
+---
+
+### 16.B.2 Local LLM Support (Ollama)
+
+**Answer: Yes — OpenClaw already supports Ollama natively.**
+
+`src/agents/models-config.providers.ts` has a full Ollama provider (`buildOllamaProvider()`) that:
+- Connects to `http://127.0.0.1:11434/v1` (OpenAI-compatible endpoint)
+- Auto-discovers installed models via `GET /api/tags`
+- Sets cost to `$0` (local inference)
+- Detects reasoning models (names containing `r1` or `reasoning`)
+- Activates when `OLLAMA_API_KEY` env var or an `ollama` auth profile is configured
+
+**For Mindfly v2:** Surface Ollama as a first-class provider option in the onboarding AI provider step (Step 2) alongside Anthropic/OpenAI/Google/OpenRouter. If Ollama is running locally (`localhost:11434` responds), show it automatically with a "🏠 Local — free, private" badge. No API key required — the "key" is a sentinel value that enables discovery.
+
+**Potential v2 uses within Mindfly:**
+- Default model for users who don't want cloud API keys
+- Privacy-first option: agent runs entirely on-device
+- Low-latency background tasks (summarisation, intent detection) where a 7B model suffices
+
+---
+
+### 16.B.3 Browser Security Agent (AI-Powered)
+
+A background OpenClaw agent that runs continuously alongside Browser Mode and acts as an intelligent security layer — not a simple blocklist, but a reasoning model observing browsing activity.
+
+**Proposed capabilities:**
+
+| Capability | How |
+|-----------|-----|
+| **Intelligent popup blocking** | CDP `Page.javascriptDialogOpening` + DOM mutation observer detects popups. Agent classifies intent (legitimate auth prompt vs dark-pattern overlay vs ad popup) and blocks selectively. Unlike blanket blockers, it allows popups that are genuinely user-initiated. |
+| **Phishing detection** | On every page load: agent receives URL + page title + DOM text sample. Compares against known phishing signals (urgency language, credential forms on non-HTTPS, domain lookalikes). Alert shown in overlay bar — not a full block, user decides. |
+| **Tool-use without permission alert** | Reuses existing `ExecApprovalsGatewayPrompter` — any time the agent tries to call a tool (file write, shell exec, browser.act) without an explicit user ask in the current turn, the security agent intercepts and prompts. This is already partially implemented in tool approvals; the security agent tightens the default. |
+| **Surgical ad blocking** | CDP `Network.requestWillBeSent` intercepts ad network requests. Agent maintains a learned per-site blocklist — blocks ad iframes and tracking pixels without breaking page layout. Differs from uBlock in that it uses the LLM to classify edge cases (e.g. "is this a first-party analytics call or a third-party tracker?"). |
+| **Tracker mapping** | On each page, agent enumerates third-party requests, identifies tracker companies, and shows a live "X trackers active" indicator in the overlay bar. Tapping shows the list. No automatic blocking — transparency first. |
+
+**Architecture:**
+- Implemented as a dedicated OpenClaw agent with a restricted system prompt: `"You are a browser security observer. You do not browse the web yourself. You receive events and classify them. You never take autonomous actions — you only alert or ask."`)
+- Runs as a second agent session in parallel with the user's main agent — separate `sessionKey`, separate model (can use a local Ollama model like `llama3.2:3b` for low-latency classification without cloud cost)
+- CDP event stream fed via the existing `browser-tool.ts` CDP connection — no second Chrome connection needed
+- Alerts surfaced in the overlay bar (colour-coded: 🟡 phishing risk, 🔴 active popup blocked, 🔵 tracker count)
+- User can disable each capability independently in Settings → Browser Security
+
+**Open questions for v2 design:**
+- Which local model is fast enough for per-request classification without adding latency? (Likely `llama3.2:3b` or a quantised phi-4-mini via Ollama)
+- Phishing detection requires access to page content — consent and privacy implications must be reviewed before v2 design is finalised
+- Tracker blocking may break some sites — need an easy per-site "allow all" escape hatch
+
+---
+
 ## 17. Technical Risks
 
 | Risk | Likelihood | Mitigation |
@@ -1286,7 +1388,8 @@ Revoking an "Always allowed" entry removes the pattern from `exec-approvals.json
 | Gateway token brute-force on loopback | Very Low | Token is a UUID v4 (122 bits of entropy); loopback bind means only local processes can attempt |
 | User accidentally enables `--bind lan` in Advanced | Low | Security audit (`audit.ts`) detects and shows critical tray warning; `isLocalDirectRequest()` still blocks unauthenticated LAN requests |
 | Local same-user process connects to gateway | Medium | TCP loopback + UUID v4 bearer token (122-bit entropy) is chosen IPC transport (§12.3.3); control UI disabled; tool approvals strict and default-deny on timeout |
+| Voice STT/TTS integration (v2) | Future | Architecture decided (§6.6); risks evaluated at v2 implementation time |
 
 ---
 
-*End of PRD v1.4*
+*End of PRD v1.6*
