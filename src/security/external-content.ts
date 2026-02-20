@@ -8,36 +8,15 @@
  * system prompts or treated as trusted instructions.
  */
 
-/**
- * Patterns that may indicate prompt injection attempts.
- * These are logged for monitoring but content is still processed (wrapped safely).
- */
-const SUSPICIOUS_PATTERNS = [
-  /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)/i,
-  /disregard\s+(all\s+)?(previous|prior|above)/i,
-  /forget\s+(everything|all|your)\s+(instructions?|rules?|guidelines?)/i,
-  /you\s+are\s+now\s+(a|an)\s+/i,
-  /new\s+instructions?:/i,
-  /system\s*:?\s*(prompt|override|command)/i,
-  /\bexec\b.*command\s*=/i,
-  /elevated\s*=\s*true/i,
-  /rm\s+-rf/i,
-  /delete\s+all\s+(emails?|files?|data)/i,
-  /<\/?system>/i,
-  /\]\s*\n\s*\[?(system|assistant|user)\]?:/i,
-];
+// Prompt injection patterns are maintained in attack-patterns.ts (single source of truth).
+// Do NOT add patterns inline here — add them there.
+import { PROMPT_INJECTION_PATTERNS, matchAllPatterns } from "./attack-patterns.js";
 
 /**
  * Check if content contains suspicious patterns that may indicate injection.
  */
 export function detectSuspiciousPatterns(content: string): string[] {
-  const matches: string[] = [];
-  for (const pattern of SUSPICIOUS_PATTERNS) {
-    if (pattern.test(content)) {
-      matches.push(pattern.source);
-    }
-  }
-  return matches;
+  return matchAllPatterns(content, PROMPT_INJECTION_PATTERNS);
 }
 
 /**
