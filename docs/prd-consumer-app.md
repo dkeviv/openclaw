@@ -1,5 +1,5 @@
 # PRD: Mindfly — Consumer AI Desktop + Browser App
-**Version:** 1.6  
+**Version:** 1.7  
 **Date:** February 19, 2026  
 **Status:** Draft for Review  
 **Owner:** Product  
@@ -1326,7 +1326,7 @@ Settings → Voice section (deferred): Talk Mode toggle, wake words, TTS voice p
 
 ---
 
-### 16.B.2 Local LLM Support (Ollama)
+### 16.B.2 Local LLM Support (Ollama) — Tiered Install
 
 **Answer: Yes — OpenClaw already supports Ollama natively.**
 
@@ -1337,16 +1337,48 @@ Settings → Voice section (deferred): Talk Mode toggle, wake words, TTS voice p
 - Detects reasoning models (names containing `r1` or `reasoning`)
 - Activates when `OLLAMA_API_KEY` env var or an `ollama` auth profile is configured
 
-**For Mindfly v2:** Surface Ollama as a first-class provider option in the onboarding AI provider step (Step 2) alongside Anthropic/OpenAI/Google/OpenRouter. If Ollama is running locally (`localhost:11434` responds), show it automatically with a "🏠 Local — free, private" badge. No API key required — the "key" is a sentinel value that enables discovery.
+#### Install Size Breakdown
+
+| Component | Size | Notes |
+|-----------|------|-------|
+| Qwen Coder 3B Q4_K_M (GGUF) | ~1.9 GB | Dominates total — ~85% of full install |
+| Ollama binary | ~50 MB | Required to serve the model |
+| OpenClaw gateway (Node.js bundled) | ~100 MB | pkg-bundled runtime + all deps |
+| macOS Swift app | ~25 MB | |
+| Windows Electron app | ~150 MB | |
+| Vite + Lit web UI | ~4 MB | Bundled into Electron / served by gateway |
+| Chrome | **0 MB** | Uses system Chrome via CDP — **not bundled** |
+| **macOS total (with local LLM)** | **~2.1 GB installed** | ~1.2 GB compressed download |
+| **Windows total (with local LLM)** | **~2.2 GB installed** | ~1.3 GB compressed download |
+| **macOS / Windows (cloud API only)** | **~150–200 MB** | Base tier — no Ollama, no model |
+
+#### Tiered Install Strategy (v2)
+
+The local LLM is **optional and post-install**. The base installer ships cloud-only and stays under 200 MB.
+
+**Base tier (v1, ships now):**
+- No Ollama, no model weights bundled
+- User provides an API key (Anthropic, OpenAI, Google, OpenRouter) in onboarding Step 2
+- Installer: ~150–200 MB (macOS .dmg or Windows .exe)
+
+**Local LLM tier (v2, post-install download):**
+- Onboarding Step 2 gains a "🏠 Run locally — free & private" option below the API key providers
+- Tapping it shows: *"Downloads ~1.9 GB. Qwen Coder 3B runs fully on your device — no API key needed."*
+- Progress bar shows download + `ollama pull` progress
+- If Ollama is already installed and running (`localhost:11434` responds), skip download — show it automatically with a "🏠 Local — free, private" badge
+- Recommended hardware note shown: *"Best on Apple Silicon or a PC with 8 GB+ RAM"*
 
 **Potential v2 uses within Mindfly:**
-- Default model for users who don't want cloud API keys
-- Privacy-first option: agent runs entirely on-device
-- Low-latency background tasks (summarisation, intent detection) where a 7B model suffices
+- Default model for users who decline all cloud API keys
+- Privacy-first option: agent runs entirely on-device, zero cloud egress
+- Low-latency background tasks (summarisation, intent detection) where a 3B–7B model suffices
 
 ---
 
-### 16.B.3 Browser Security Agent (AI-Powered)
+### 16.B.3 Browser Security Agent (AI-Powered) — v3+
+
+> **Dependency:** This feature requires the Local LLM tier (§16.B.2) to be shipped and stable first.  
+> The security agent uses a local Ollama model for per-request classification — it must not require a cloud API call for every network request (latency + cost). Therefore it is scoped to **v3** at the earliest, after the tiered Ollama install lands in v2.
 
 A background OpenClaw agent that runs continuously alongside Browser Mode and acts as an intelligent security layer — not a simple blocklist, but a reasoning model observing browsing activity.
 
@@ -1380,7 +1412,7 @@ A background OpenClaw agent that runs continuously alongside Browser Mode and ac
 |------|-----------|------------|
 | Gateway auto-start fails silently on Windows | Medium | Electron main monitors child process, shows tray error badge |
 | Chrome CDP port conflict (multi-profile) | Low | Existing `ensurePortAvailable()` in `chrome.ts` handles this |
-| Electron binary size (Windows: ~150MB) | Low | Acceptable for desktop; use web UI for Windows only |
+| Electron binary size (Windows: ~150MB) | Low | Acceptable for desktop; base tier (cloud-only) is ~150-200 MB; local LLM adds ~2 GB as post-install optional download |
 | iOS App Store rejects gateway process | N/A | iOS app is a client only — no local gateway on mobile |
 | Inter font load flicker on first paint | Low | Font preload in `<head>`, fallback to system-ui is visually similar |
 | Google OAuth token expiry causes silent failures | Medium | `google-identity.ts` checks `expiresAt` at gateway start; prompts re-auth if within 7 days of expiry |
@@ -1392,4 +1424,4 @@ A background OpenClaw agent that runs continuously alongside Browser Mode and ac
 
 ---
 
-*End of PRD v1.6*
+*End of PRD v1.7*
