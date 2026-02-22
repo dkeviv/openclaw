@@ -321,7 +321,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let seenVersion = UserDefaults.standard.integer(forKey: onboardingVersionKey)
         let shouldShow = seenVersion < currentOnboardingVersion || !AppStateStore.shared.onboardingSeen
         guard shouldShow else { return }
+        let env = ProcessInfo.processInfo.environment
+        let isMindfly = env["OPENCLAW_BRAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mindfly"
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if isMindfly {
+                Task { @MainActor in
+                    do {
+                        let config = try await GatewayEndpointStore.shared.requireConfig()
+                        var url = try GatewayEndpointStore.dashboardURL(for: config)
+                        if var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                            var items = components.queryItems ?? []
+                            items.append(URLQueryItem(name: "onboarding", value: "1"))
+                            components.queryItems = items
+                            if let next = components.url {
+                                url = next
+                            }
+                        }
+                        NSWorkspace.shared.open(url)
+                        AppStateStore.shared.onboardingSeen = true
+                        UserDefaults.standard.set(currentOnboardingVersion, forKey: onboardingVersionKey)
+                    } catch {
+                        OnboardingController.shared.show()
+                    }
+                }
+                return
+            }
             OnboardingController.shared.show()
         }
     }

@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 
 import type { OpenClawConfig } from "../../config/config.js";
+import { wrapExternalContent } from "../../security/external-content.js";
 import {
   closeDispatcher,
   createPinnedDispatcher,
@@ -10,7 +11,7 @@ import {
 import type { Dispatcher } from "undici";
 import { stringEnum } from "../schema/typebox.js";
 import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readNumberParam, readStringParam } from "./common.js";
+import { readNumberParam, readStringParam } from "./common.js";
 import {
   CacheEntry,
   DEFAULT_CACHE_TTL_MINUTES,
@@ -605,6 +606,9 @@ export function createWebFetchTool(options?: {
   if (!resolveFetchEnabled({ fetch, sandboxed: options?.sandboxed })) {
     return null;
   }
+  const wrapConfig = options?.config?.tools?.safety?.wrapExternalContent;
+  const wrapExternal = wrapConfig?.enabled !== false;
+  const wrapWarning = wrapConfig?.includeWarning !== false;
   const readabilityEnabled = resolveFetchReadabilityEnabled(fetch);
   const firecrawl = resolveFirecrawlConfig(fetch);
   const firecrawlApiKey = resolveFirecrawlApiKey(firecrawl);
@@ -648,7 +652,26 @@ export function createWebFetchTool(options?: {
         firecrawlStoreInCache: true,
         firecrawlTimeoutSeconds,
       });
-      return jsonResult(result);
+      const contentResult =
+        wrapExternal && typeof (result as { text?: unknown }).text === "string"
+          ? {
+              ...result,
+              text: wrapExternalContent(String((result as { text?: unknown }).text), {
+                source: "api",
+                sender: url,
+                includeWarning: wrapWarning,
+              }),
+            }
+          : result;
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(contentResult, null, 2),
+          },
+        ],
+        details: result,
+      };
     },
   };
 }

@@ -243,6 +243,27 @@ describe("browser tool snapshot maxChars", () => {
     );
     expect(gatewayMocks.callGatewayTool).not.toHaveBeenCalled();
   });
+
+  it("requests tool approval once per session for browser.read and browser.control", async () => {
+    configMocks.loadConfig.mockReturnValue({
+      browser: {},
+      tools: { safety: { toolApprovals: { enabled: true } } },
+    });
+    gatewayMocks.callGatewayTool
+      .mockImplementationOnce(async () => ({ decision: "allow-once" }))
+      .mockImplementationOnce(async () => ({ decision: "allow-once" }));
+
+    const tool = createBrowserTool({ agentSessionKey: "test:browser-approvals" });
+    await tool.execute?.(null, { action: "status" }); // browser.read
+    await tool.execute?.(null, { action: "tabs" }); // browser.read cached
+    await tool.execute?.(null, { action: "open", targetUrl: "https://example.com" }); // browser.control
+    await tool.execute?.(null, { action: "open", targetUrl: "https://example.com/2" }); // cached
+
+    const approvalCalls = gatewayMocks.callGatewayTool.mock.calls.filter(
+      ([method]) => method === "tool.approval.request",
+    );
+    expect(approvalCalls).toHaveLength(2);
+  });
 });
 
 describe("browser tool snapshot labels", () => {
@@ -280,12 +301,33 @@ describe("browser tool snapshot labels", () => {
     expect(toolCommonMocks.imageResultFromFile).toHaveBeenCalledWith(
       expect.objectContaining({
         path: "/tmp/snap.png",
-        extraText: "label text",
       }),
     );
+    const call = toolCommonMocks.imageResultFromFile.mock.calls.at(0)?.[0] as
+      | { extraText?: string }
+      | undefined;
+    expect(call?.extraText).toContain("<<<EXTERNAL_UNTRUSTED_CONTENT>>>");
+    expect(call?.extraText).toContain("<<<END_EXTERNAL_UNTRUSTED_CONTENT>>>");
+    expect(call?.extraText).toContain("label text");
     expect(result).toEqual(imageResult);
     expect(result?.content).toHaveLength(2);
     expect(result?.content?.[0]).toMatchObject({ type: "text", text: "label text" });
     expect(result?.content?.[1]).toMatchObject({ type: "image" });
+  });
+});
+
+describe("browser tool external content wrapping", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    configMocks.loadConfig.mockReturnValue({ browser: {} });
+  });
+
+  it("wraps ai snapshot text by default", async () => {
+    const tool = createBrowserTool();
+    const result = await tool.execute?.(null, { action: "snapshot", snapshotFormat: "ai" });
+    const text = result?.content?.[0] && "text" in result.content[0] ? result.content[0].text : "";
+
+    expect(text).toContain("<<<EXTERNAL_UNTRUSTED_CONTENT>>>");
+    expect(text).toContain("<<<END_EXTERNAL_UNTRUSTED_CONTENT>>>");
   });
 });

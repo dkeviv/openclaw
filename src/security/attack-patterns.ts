@@ -57,7 +57,7 @@ export const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /\bHuman\s*:\s*\n.*\bAssistant\s*:/is,
 
   // Jailbreak keywords
-  /\bDAN\b/,                            // "Do Anything Now" jailbreak
+  /\bDAN\b/, // "Do Anything Now" jailbreak
   /\bjailbreak\b/i,
   /\buncensored\s+mode\b/i,
   /\bdev(eloper)?\s+mode\b/i,
@@ -71,8 +71,8 @@ export const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /fetch\s*\(\s*["'`]https?:\/\//i,
 
   // Invisible-text injection signals (instructed to use zero-width chars or white text)
-  /\u200b.*instruction/i,               // Zero-width space before "instruction"
-  /\u00ad.*instruction/i,               // Soft hyphen before "instruction"
+  /\u200b.*instruction/i, // Zero-width space before "instruction"
+  /\u00ad.*instruction/i, // Soft hyphen before "instruction"
 
   // Command execution planted in content
   /\brm\s+-[rf]{1,2}\b/,
@@ -110,11 +110,40 @@ export const PHISHING_TLD_LOOKALIKES: [string, string][] = [
 
 /** High-value brand names frequently impersonated in phishing. */
 export const PHISHING_BRAND_TARGETS: string[] = [
-  "paypal", "apple", "google", "microsoft", "amazon", "netflix", "facebook",
-  "instagram", "twitter", "x.com", "linkedin", "dropbox", "icloud", "outlook",
-  "office365", "chase", "wellsfargo", "bankofamerica", "citibank", "coinbase",
-  "binance", "metamask", "opensea", "github", "gitlab", "bitbucket", "cloudflare",
-  "stripe", "shopify", "ebay", "walmart", "steam", "epic", "roblox",
+  "paypal",
+  "apple",
+  "google",
+  "microsoft",
+  "amazon",
+  "netflix",
+  "facebook",
+  "instagram",
+  "twitter",
+  "x.com",
+  "linkedin",
+  "dropbox",
+  "icloud",
+  "outlook",
+  "office365",
+  "chase",
+  "wellsfargo",
+  "bankofamerica",
+  "citibank",
+  "coinbase",
+  "binance",
+  "metamask",
+  "opensea",
+  "github",
+  "gitlab",
+  "bitbucket",
+  "cloudflare",
+  "stripe",
+  "shopify",
+  "ebay",
+  "walmart",
+  "steam",
+  "epic",
+  "roblox",
 ];
 
 /** URL keyword signals that raise phishing probability. */
@@ -208,8 +237,8 @@ export const AD_NETWORK_ORIGINS: string[] = [
   "googlesyndication.com",
   "googletagservices.com",
   "googleadservices.com",
-  "google-analytics.com",         // also tracking
-  "googletagmanager.com",         // also tracking
+  "google-analytics.com", // also tracking
+  "googletagmanager.com", // also tracking
 
   // Meta / Facebook
   "facebook.net",
@@ -246,9 +275,9 @@ export const AD_NETWORK_ORIGINS: string[] = [
   "smartadserver.com",
   "adscale.de",
   "yieldlab.net",
-  "adsrvr.org",             // The Trade Desk
-  "advertising.com",        // Verizon/Yahoo ads
-  "yastatic.net",           // Yandex ads
+  "adsrvr.org", // The Trade Desk
+  "advertising.com", // Verizon/Yahoo ads
+  "yastatic.net", // Yandex ads
   "an.yandex.ru",
 ];
 
@@ -267,7 +296,7 @@ export const TRACKER_ORIGINS: string[] = [
   "hotjar.com",
   "mouseflow.com",
   "logrocket.com",
-  "clarity.ms",              // Microsoft Clarity
+  "clarity.ms", // Microsoft Clarity
   "matomo.cloud",
 
   // Session replay / heatmaps
@@ -278,13 +307,13 @@ export const TRACKER_ORIGINS: string[] = [
   // Fingerprinting
   "fingerprintjs.com",
   "fpjs.io",
-  "cloudflare.com/fingerprint",  // not all CF, but the fingerprint path
+  "cloudflare.com/fingerprint", // not all CF, but the fingerprint path
 
   // Social tracking pixels
   "tr.snapchat.com",
   "ct.pinterest.com",
   "analytics.twitter.com",
-  "bat.bing.com",            // Microsoft MACT pixel
+  "bat.bing.com", // Microsoft MACT pixel
   "tiktok.com",
   "analytics.tiktok.com",
 
@@ -299,12 +328,12 @@ export const TRACKER_ORIGINS: string[] = [
   "hubspot.com",
   "marketo.net",
   "pardot.com",
-  "salesforce.com",          // only tracker endpoints, not the main app
+  "salesforce.com", // only tracker endpoints, not the main app
   "exacttarget.com",
-  "mktoresp.com",            // Marketo
+  "mktoresp.com", // Marketo
   "eloqua.com",
   "intercom.io",
-  "intercom.com",            // also chat — only tag, never block
+  "intercom.com", // also chat — only tag, never block
   "drift.com",
   "driftt.com",
 
@@ -316,9 +345,9 @@ export const TRACKER_ORIGINS: string[] = [
 
   // Identity graph / data brokers
   "liveramp.com",
-  "rlcdn.com",               // LiveRamp
+  "rlcdn.com", // LiveRamp
   "kruxdigital.com",
-  "bluekai.com",             // Oracle BlueKai
+  "bluekai.com", // Oracle BlueKai
   "lotame.com",
   "eyeota.net",
   "neustar.biz",
@@ -366,15 +395,15 @@ export const SUSPICIOUS_DOM_MUTATIONS: RegExp[] = [
 export const HIGH_RISK_TOOL_ARGS: RegExp[] = [
   // Destructive shell commands
   /\brm\s+-[rf]{1,2}\s/,
-  /\brmdir\s+\/s\b/i,           // Windows rmdir /s
+  /\brmdir\s+\/s\b/i, // Windows rmdir /s
   /\bformat\s+[a-z]:\s*\/[a-z]/i, // Windows format drive
-  /\bdd\s+if=.*of=\/dev\//i,   // dd to raw device
+  /\bdd\s+if=.*of=\/dev\//i, // dd to raw device
 
   // Remote code execution
   /\bcurl\s+[^|]*\|\s*(ba)?sh\b/i,
   /\bwget\s+[^|]*\|\s*(ba)?sh\b/i,
   /\bpowershell\s+-[eEnNcC]\s+/i,
-  /\biex\s*\(/i,                // PowerShell Invoke-Expression
+  /\biex\s*\(/i, // PowerShell Invoke-Expression
   /\bInvoke-Expression\b/i,
   /\bStart-Process\b/i,
   /\beval\s*["'`(]/i,
@@ -385,7 +414,7 @@ export const HIGH_RISK_TOOL_ARGS: RegExp[] = [
 
   // Network exfiltration
   /\bexfil(?:trate?)?\b/i,
-  /\bnc\s+-[a-z]*e\b/i,         // netcat with -e (execute after connect)
+  /\bnc\s+-[a-z]*e\b/i, // netcat with -e (execute after connect)
   /\bsocat\s+.*EXEC/i,
 
   // Credential / secrets access
@@ -393,7 +422,7 @@ export const HIGH_RISK_TOOL_ARGS: RegExp[] = [
   /\bcredential[-_]?manager\b/i,
   /\b\/etc\/shadow\b/,
   /\b\/etc\/passwd\b/,
-  /\bssh-agent\b.*-k\b/,        // ssh-agent kill (disrupt auth)
+  /\bssh-agent\b.*-k\b/, // ssh-agent kill (disrupt auth)
   /\bgit\s+config\s+.*credential/i,
 
   // Browser data theft
@@ -403,7 +432,7 @@ export const HIGH_RISK_TOOL_ARGS: RegExp[] = [
   /\bsafari\b.*\bKeychain\.db\b/i,
 
   // Privilege escalation
-  /\bsudo\s+-S\b/,              // sudo with stdin password
+  /\bsudo\s+-S\b/, // sudo with stdin password
   /\bsudo\s+su\b/,
   /\bchmod\s+[0-7]*7[0-7][0-7]\s+\/(bin|etc|usr|sbin)\b/i,
 
@@ -452,7 +481,9 @@ export function matchesOrigin(hostname: string, origins: string[]): boolean {
   const h = hostname.toLowerCase();
   for (const origin of origins) {
     const o = origin.toLowerCase();
-    if (h === o || h.endsWith(`.${o}`)) return true;
+    if (h === o || h.endsWith(`.${o}`)) {
+      return true;
+    }
   }
   return false;
 }
@@ -469,7 +500,9 @@ export function detectPhishingSignals(url: string): string[] {
     const { hostname } = new URL(url);
     for (const char of IDN_HOMOGRAPH_CHARS) {
       if (hostname.includes(char)) {
-        signals.push(`IDN homograph char U+${char.codePointAt(0)?.toString(16).padStart(4, "0")} in hostname`);
+        signals.push(
+          `IDN homograph char U+${char.codePointAt(0)?.toString(16).padStart(4, "0")} in hostname`,
+        );
       }
     }
     // Brand target in a non-canonical domain

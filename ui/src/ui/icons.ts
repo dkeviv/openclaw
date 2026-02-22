@@ -23,6 +23,15 @@ export const icons = {
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   `,
+  plug: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M6 8v5a6 6 0 0 0 6 6h0a6 6 0 0 0 6-6V8Z" />
+      <path d="M8 10h8" />
+    </svg>
+  `,
   radio: html`
     <svg viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="2" />
@@ -202,14 +211,6 @@ export const icons = {
     <svg viewBox="0 0 24 24">
       <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
       <path d="M12 18h.01" />
-    </svg>
-  `,
-  plug: html`
-    <svg viewBox="0 0 24 24">
-      <path d="M12 22v-5" />
-      <path d="M9 8V2" />
-      <path d="M15 8V2" />
-      <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
     </svg>
   `,
   circle: html`

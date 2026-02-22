@@ -1,0 +1,9 @@
+Follow `AGENTS.md` for repo guidelines.
+
+Critical (Mindfly / consumer UX):
+- Maintain high code quality (strict typing, no `any`, small composable changes).
+- Proactively apply only low-risk refactors adjacent to your changes; avoid churn.
+- Do not regress functionality; validate with lint/build/tests for non-trivial changes.
+- UI/UX must match Claude.ai / Claude cowork-level polish but with distinct Mindfly branding.
+- Theme accent color must come from the Mindfly butterfly icon (ask for canonical tokens if missing).
+

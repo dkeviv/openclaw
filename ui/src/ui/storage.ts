@@ -2,6 +2,12 @@ const KEY = "openclaw.control.settings.v1";
 
 import type { ThemeMode } from "./theme";
 
+declare global {
+  interface Window {
+    __OPENCLAW_GATEWAY_TOKEN__?: string;
+  }
+}
+
 export type UiSettings = {
   gatewayUrl: string;
   token: string;
@@ -20,10 +26,14 @@ export function loadSettings(): UiSettings {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     return `${proto}://${location.host}`;
   })();
+  const injectedToken =
+    typeof window !== "undefined" && typeof window.__OPENCLAW_GATEWAY_TOKEN__ === "string"
+      ? window.__OPENCLAW_GATEWAY_TOKEN__.trim()
+      : "";
 
   const defaults: UiSettings = {
     gatewayUrl: defaultUrl,
-    token: "",
+    token: injectedToken,
     sessionKey: "main",
     lastActiveSessionKey: "main",
     theme: "system",

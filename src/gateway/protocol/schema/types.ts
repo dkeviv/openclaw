@@ -59,6 +59,13 @@ import type {
   ExecApprovalResolveParamsSchema,
 } from "./exec-approvals.js";
 import type {
+  ToolApprovalsGetParamsSchema,
+  ToolApprovalsSetParamsSchema,
+  ToolApprovalsSnapshotSchema,
+  ToolApprovalRequestParamsSchema,
+  ToolApprovalResolveParamsSchema,
+} from "./tool-approvals.js";
+import type {
   DevicePairApproveParamsSchema,
   DevicePairListParamsSchema,
   DevicePairRejectParamsSchema,
@@ -83,6 +90,24 @@ import type {
   LogsTailParamsSchema,
   LogsTailResultSchema,
 } from "./logs-chat.js";
+import type {
+  MindflyGoogleIdentitySchema,
+  MindflyGoogleIdentityGetParamsSchema,
+  MindflyGoogleIdentityGetResultSchema,
+  MindflyGoogleSignInStartParamsSchema,
+  MindflyGoogleSignInStartResultSchema,
+  MindflyGoogleSignInWaitParamsSchema,
+  MindflyGoogleSignInWaitResultSchema,
+  MindflyGoogleSignOutParamsSchema,
+  MindflyGoogleSignOutResultSchema,
+  MindflyProviderSchema,
+  MindflyIntegrationsProvidersListParamsSchema,
+  MindflyIntegrationsProvidersListResultSchema,
+  MindflyIntegrationsProviderSetApiKeyParamsSchema,
+  MindflyIntegrationsProviderSetApiKeyResultSchema,
+  MindflyIntegrationsProviderClearApiKeyParamsSchema,
+  MindflyIntegrationsProviderClearApiKeyResultSchema,
+} from "./mindfly.js";
 import type {
   NodeDescribeParamsSchema,
   NodeEventParamsSchema,
@@ -193,6 +218,34 @@ export type CronRunsParams = Static<typeof CronRunsParamsSchema>;
 export type CronRunLogEntry = Static<typeof CronRunLogEntrySchema>;
 export type LogsTailParams = Static<typeof LogsTailParamsSchema>;
 export type LogsTailResult = Static<typeof LogsTailResultSchema>;
+export type MindflyGoogleIdentity = Static<typeof MindflyGoogleIdentitySchema>;
+export type MindflyGoogleIdentityGetParams = Static<typeof MindflyGoogleIdentityGetParamsSchema>;
+export type MindflyGoogleIdentityGetResult = Static<typeof MindflyGoogleIdentityGetResultSchema>;
+export type MindflyGoogleSignInStartParams = Static<typeof MindflyGoogleSignInStartParamsSchema>;
+export type MindflyGoogleSignInStartResult = Static<typeof MindflyGoogleSignInStartResultSchema>;
+export type MindflyGoogleSignInWaitParams = Static<typeof MindflyGoogleSignInWaitParamsSchema>;
+export type MindflyGoogleSignInWaitResult = Static<typeof MindflyGoogleSignInWaitResultSchema>;
+export type MindflyGoogleSignOutParams = Static<typeof MindflyGoogleSignOutParamsSchema>;
+export type MindflyGoogleSignOutResult = Static<typeof MindflyGoogleSignOutResultSchema>;
+export type MindflyProvider = Static<typeof MindflyProviderSchema>;
+export type MindflyIntegrationsProvidersListParams = Static<
+  typeof MindflyIntegrationsProvidersListParamsSchema
+>;
+export type MindflyIntegrationsProvidersListResult = Static<
+  typeof MindflyIntegrationsProvidersListResultSchema
+>;
+export type MindflyIntegrationsProviderSetApiKeyParams = Static<
+  typeof MindflyIntegrationsProviderSetApiKeyParamsSchema
+>;
+export type MindflyIntegrationsProviderSetApiKeyResult = Static<
+  typeof MindflyIntegrationsProviderSetApiKeyResultSchema
+>;
+export type MindflyIntegrationsProviderClearApiKeyParams = Static<
+  typeof MindflyIntegrationsProviderClearApiKeyParamsSchema
+>;
+export type MindflyIntegrationsProviderClearApiKeyResult = Static<
+  typeof MindflyIntegrationsProviderClearApiKeyResultSchema
+>;
 export type ExecApprovalsGetParams = Static<typeof ExecApprovalsGetParamsSchema>;
 export type ExecApprovalsSetParams = Static<typeof ExecApprovalsSetParamsSchema>;
 export type ExecApprovalsNodeGetParams = Static<typeof ExecApprovalsNodeGetParamsSchema>;
@@ -200,6 +253,11 @@ export type ExecApprovalsNodeSetParams = Static<typeof ExecApprovalsNodeSetParam
 export type ExecApprovalsSnapshot = Static<typeof ExecApprovalsSnapshotSchema>;
 export type ExecApprovalRequestParams = Static<typeof ExecApprovalRequestParamsSchema>;
 export type ExecApprovalResolveParams = Static<typeof ExecApprovalResolveParamsSchema>;
+export type ToolApprovalsGetParams = Static<typeof ToolApprovalsGetParamsSchema>;
+export type ToolApprovalsSetParams = Static<typeof ToolApprovalsSetParamsSchema>;
+export type ToolApprovalsSnapshot = Static<typeof ToolApprovalsSnapshotSchema>;
+export type ToolApprovalRequestParams = Static<typeof ToolApprovalRequestParamsSchema>;
+export type ToolApprovalResolveParams = Static<typeof ToolApprovalResolveParamsSchema>;
 export type DevicePairListParams = Static<typeof DevicePairListParamsSchema>;
 export type DevicePairApproveParams = Static<typeof DevicePairApproveParamsSchema>;
 export type DevicePairRejectParams = Static<typeof DevicePairRejectParamsSchema>;

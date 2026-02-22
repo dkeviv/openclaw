@@ -10,6 +10,7 @@ import type { WebSocketServer } from "ws";
 import { handleA2uiHttpRequest } from "../canvas-host/a2ui.js";
 import type { CanvasHostHandler } from "../canvas-host/server.js";
 import { loadConfig } from "../config/config.js";
+import { isMindflyBrand } from "../infra/brand.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
 import { handleSlackHttpRequest } from "../slack/http/index.js";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
@@ -301,6 +302,10 @@ export function createGatewayHttpServer(opts: {
           handleControlUiHttpRequest(req, res, {
             basePath: controlUiBasePath,
             config: configSnapshot,
+            gatewayToken:
+              isMindflyBrand(process.env) && resolvedAuth.mode === "token"
+                ? resolvedAuth.token
+                : undefined,
           })
         ) {
           return;

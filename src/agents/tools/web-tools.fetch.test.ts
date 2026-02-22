@@ -215,6 +215,43 @@ describe("web_fetch extraction fallbacks", () => {
     expect(details.extractor).toBe("firecrawl");
     expect(details.text).toContain("firecrawl fallback");
   });
+
+  it("wraps extracted text in untrusted boundaries by default", async () => {
+    const mockFetch = vi.fn((input: RequestInfo) =>
+      Promise.resolve(
+        htmlResponse("<html><body><main>Hello</main></body></html>", requestUrl(input)),
+      ),
+    );
+    // @ts-expect-error mock fetch
+    global.fetch = mockFetch;
+
+    const tool = createWebFetchTool({
+      config: {
+        tools: {
+          web: {
+            fetch: { cacheTtlMinutes: 0, firecrawl: { enabled: false } },
+          },
+        },
+      },
+      sandboxed: false,
+    });
+
+    const result = await tool?.execute?.("call", {
+      url: "https://example.com/wrap",
+      extractMode: "text",
+    });
+
+    const contentText =
+      result?.content?.[0] && "text" in result.content[0] ? result.content[0].text : "";
+    const contentPayload = JSON.parse(contentText) as { text?: string };
+
+    expect(contentPayload.text).toContain("<<<EXTERNAL_UNTRUSTED_CONTENT>>>");
+    expect(contentPayload.text).toContain("<<<END_EXTERNAL_UNTRUSTED_CONTENT>>>");
+
+    const details = result?.details as { text?: string };
+    expect(details.text).not.toContain("<<<EXTERNAL_UNTRUSTED_CONTENT>>>");
+  });
+
   it("strips and truncates HTML from error responses", async () => {
     const long = "x".repeat(12_000);
     const html =

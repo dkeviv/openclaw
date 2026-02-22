@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { peekSystemEvents, resetSystemEventsForTest } from "../infra/system-events.js";
+
 vi.mock("./tools/gateway.js", () => ({
   callGatewayTool: vi.fn(),
 }));
@@ -19,6 +21,7 @@ describe("exec approvals", () => {
   let previousUserProfile: string | undefined;
 
   beforeEach(async () => {
+    resetSystemEventsForTest();
     previousHome = process.env.HOME;
     previousUserProfile = process.env.USERPROFILE;
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-test-"));
@@ -29,6 +32,7 @@ describe("exec approvals", () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    resetSystemEventsForTest();
     if (previousHome === undefined) {
       delete process.env.HOME;
     } else {
@@ -180,5 +184,48 @@ describe("exec approvals", () => {
     expect(result.details.status).toBe("approval-pending");
     await approvalSeen;
     expect(calls).toContain("exec.approval.request");
+  });
+
+  it("defaults to deny when approval request yields no decision", async () => {
+    const { callGatewayTool } = await import("./tools/gateway.js");
+    const calls: string[] = [];
+    let resolveApproval: (() => void) | undefined;
+    const approvalSeen = new Promise<void>((resolve) => {
+      resolveApproval = resolve;
+    });
+
+    vi.mocked(callGatewayTool).mockImplementation(async (method) => {
+      calls.push(method);
+      if (method === "exec.approval.request") {
+        resolveApproval?.();
+        return {};
+      }
+      if (method === "node.invoke") {
+        return { ok: true };
+      }
+      return { ok: true };
+    });
+
+    const sessionKey = "test:exec-approval-timeout";
+    const { createExecTool } = await import("./bash-tools.exec.js");
+    const tool = createExecTool({
+      host: "node",
+      ask: "always",
+      security: "full",
+      approvalRunningNoticeMs: 0,
+      sessionKey,
+    });
+
+    const result = await tool.execute("call5", { command: "echo ok" });
+    expect(result.details.status).toBe("approval-pending");
+
+    await approvalSeen;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(calls).toContain("exec.approval.request");
+    expect(calls).not.toContain("node.invoke");
+
+    const events = peekSystemEvents(sessionKey).join("\n");
+    expect(events).toContain("approval-timeout");
   });
 });

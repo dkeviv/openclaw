@@ -54,6 +54,9 @@ export function createOpenClawTools(options?: {
   /** Explicit agent ID override for cron/hook sessions. */
   requesterAgentIdOverride?: string;
 }): AnyAgentTool[] {
+  const requesterAgentId =
+    options?.requesterAgentIdOverride ??
+    resolveSessionAgentId({ sessionKey: options?.agentSessionKey, config: options?.config });
   const imageTool = options?.agentDir?.trim()
     ? createImageTool({
         config: options?.config,
@@ -74,6 +77,8 @@ export function createOpenClawTools(options?: {
     createBrowserTool({
       sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
       allowHostControl: options?.allowHostBrowserControl,
+      agentSessionKey: options?.agentSessionKey,
+      agentId: requesterAgentId,
     }),
     createCanvasTool(),
     createNodesTool({

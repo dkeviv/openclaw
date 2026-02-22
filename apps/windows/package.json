@@ -1,0 +1,17 @@
+{
+  "name": "mindfly-windows",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "node --import tsx src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
+

@@ -32,6 +32,7 @@ import type { OpenClawApp } from "./app";
 
 type SettingsHost = {
   settings: UiSettings;
+  brand?: "openclaw" | "mindfly";
   theme: ThemeMode;
   themeResolved: ResolvedTheme;
   applySessionKey: string;
@@ -54,7 +55,14 @@ export function applySettings(host: SettingsHost, next: UiSettings) {
     lastActiveSessionKey: next.lastActiveSessionKey?.trim() || next.sessionKey.trim() || "main",
   };
   host.settings = normalized;
-  saveSettings(normalized);
+  const persisted =
+    host.brand === "mindfly"
+      ? {
+          ...normalized,
+          token: "",
+        }
+      : normalized;
+  saveSettings(persisted);
   if (next.theme !== host.theme) {
     host.theme = next.theme;
     applyResolvedTheme(host, resolveTheme(next.theme));

@@ -6,6 +6,7 @@ import { loadJsonFile, saveJsonFile } from "../../infra/json-file.js";
 import { AUTH_STORE_LOCK_OPTIONS, AUTH_STORE_VERSION, log } from "./constants.js";
 import { syncExternalCliCredentials } from "./external-cli-sync.js";
 import { ensureAuthStoreFile, resolveAuthStorePath, resolveLegacyAuthStorePath } from "./paths.js";
+import { migrateAuthProfileStoreToSecureStore } from "./secure-store.js";
 import type { AuthProfileCredential, AuthProfileStore, ProfileUsageStats } from "./types.js";
 
 type LegacyAuthStore = Record<string, AuthProfileCredential>;
@@ -199,7 +200,8 @@ export function loadAuthProfileStore(): AuthProfileStore {
   if (asStore) {
     // Sync from external CLI tools on every load
     const synced = syncExternalCliCredentials(asStore);
-    if (synced) {
+    const migrated = migrateAuthProfileStoreToSecureStore(asStore);
+    if (synced || migrated) {
       saveJsonFile(authPath, asStore);
     }
     return asStore;
@@ -243,12 +245,20 @@ export function loadAuthProfileStore(): AuthProfileStore {
         };
       }
     }
-    syncExternalCliCredentials(store);
+    const syncedCli = syncExternalCliCredentials(store);
+    const migrated = migrateAuthProfileStoreToSecureStore(store);
+    if (syncedCli || migrated) {
+      saveJsonFile(authPath, store);
+    }
     return store;
   }
 
   const store: AuthProfileStore = { version: AUTH_STORE_VERSION, profiles: {} };
-  syncExternalCliCredentials(store);
+  const syncedCli = syncExternalCliCredentials(store);
+  const migrated = migrateAuthProfileStoreToSecureStore(store);
+  if (syncedCli || migrated) {
+    saveJsonFile(authPath, store);
+  }
   return store;
 }
 
@@ -262,7 +272,10 @@ function loadAuthProfileStoreForAgent(
   if (asStore) {
     // Sync from external CLI tools on every load
     const synced = syncExternalCliCredentials(asStore);
+    const migrated = migrateAuthProfileStoreToSecureStore(asStore);
     if (synced) {
+      saveJsonFile(authPath, asStore);
+    } else if (migrated) {
       saveJsonFile(authPath, asStore);
     }
     return asStore;
@@ -323,7 +336,8 @@ function loadAuthProfileStoreForAgent(
 
   const mergedOAuth = mergeOAuthFileIntoStore(store);
   const syncedCli = syncExternalCliCredentials(store);
-  const shouldWrite = legacy !== null || mergedOAuth || syncedCli;
+  const migrated = migrateAuthProfileStoreToSecureStore(store);
+  const shouldWrite = legacy !== null || mergedOAuth || syncedCli || migrated;
   if (shouldWrite) {
     saveJsonFile(authPath, store);
   }
@@ -367,6 +381,7 @@ export function ensureAuthProfileStore(
 
 export function saveAuthProfileStore(store: AuthProfileStore, agentDir?: string): void {
   const authPath = resolveAuthStorePath(agentDir);
+  migrateAuthProfileStoreToSecureStore(store);
   const payload = {
     version: AUTH_STORE_VERSION,
     profiles: store.profiles,

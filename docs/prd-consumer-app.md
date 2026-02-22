@@ -626,9 +626,9 @@ This covers: AI provider API keys, OAuth access/refresh tokens (Google sign-in, 
 
 | Platform | Secure store | Encryption layers |
 |----------|-------------|-------------------|
-| macOS | macOS Keychain (`Security.framework`, `kSecClassGenericPassword`) | OS AES-256-GCM + Mindfly `encryptForStorage()` (§ 12.5.6) |
-| Windows | Windows Credential Manager via `keytar` (DPAPI, per-user, survives reboot) | DPAPI + Mindfly `encryptForStorage()` |
-| Linux | libsecret / GNOME Keyring | OS encryption + Mindfly `encryptForStorage()` |
+| macOS | macOS Keychain (Generic Password) via `src/infra/secure-store.ts` | OS Keychain encryption + Mindfly `encryptForStorage()` (§ 12.5.6) |
+| Windows | Windows Credential Manager (DPAPI, per-user) via `src/infra/secure-store.ts` | DPAPI + Mindfly `encryptForStorage()` |
+| Linux | libsecret / GNOME Keyring via `src/infra/secure-store.ts` | OS encryption + Mindfly `encryptForStorage()` |
 
 **Two-layer encryption model:**
 - **OS layer** — hardware-backed, user-session scoped. Other OS accounts cannot read entries.
@@ -637,30 +637,28 @@ This covers: AI provider API keys, OAuth access/refresh tokens (Google sign-in, 
 **Universal rules — no exceptions:**
 - No secret is written to `openclaw.json`, session transcripts, logs, URLs, env files, or any disk path in plaintext.
 - `auth-profiles.json` (transitional gateway credential store) is `chmod 600` / owner-only `icacls` and audited at startup by `audit-extra.ts`. Full Keychain migration completes in v1.
-- Secrets injected into the gateway process travel only as child-process env vars — not inherited by grandchildren.
-- **Revocation:** on disconnect / sign-out, `keytar.deletePassword()` is called immediately. No orphaned tokens remain.
+- Gateway auth secrets must never leak into tool subprocesses. Any tool that spawns subprocesses (e.g. `exec`) scrubs sensitive env vars by default (e.g. `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`) unless explicitly provided.
+- **Revocation:** on disconnect / sign-out, secure-store entries are deleted immediately. No orphaned tokens remain.
 - **Rotation:** OAuth access tokens are refreshed silently ≥5 min before expiry using the stored refresh token. Revoked refresh tokens surface as a re-authentication prompt, never a silent failure.
 
-**Keychain naming convention** (`keytar` service = `"mindfly"`):
+**Secure store naming convention** (service/account keys):
 
-| Secret | `keytar` account key |
-|--------|---------------------|
-| Gateway bearer token | `gateway-token` |
-| Google access token | `google-access-token` |
-| Google refresh token | `google-refresh-token` |
-| AI provider API key | `provider:<name>` (e.g. `provider:anthropic`) |
-| Integration OAuth access token | `integration:<name>:access` |
-| Integration OAuth refresh token | `integration:<name>:refresh` |
-| Integration PAT / static API key | `integration:<name>:token` |
+| Secret | Secure store service | Account key |
+|--------|----------------------|------------|
+| Gateway bearer token | `mindfly` | `gateway-token` |
+| Google access token | `mindfly` | `google-access-token` |
+| Google refresh token | `mindfly` | `google-refresh-token` |
+| Google identity metadata (non-secret) | `mindfly` | `google-identity` |
+| AI provider API key (stored via auth-profiles secure refs) | `ai.openclaw.auth-profiles` | `auth-profile:<provider>:default:api-key` |
 
 All entries follow the same pattern — write encrypted, read + decrypt, delete on revoke:
 ```ts
-await keytar.setPassword("mindfly", key, encryptForStorage(secret, installUuid));
-const secret = decryptFromStorage(await keytar.getPassword("mindfly", key), installUuid);
-await keytar.deletePassword("mindfly", key); // on disconnect
+writeSecureStoreSecret({ service, account, secret: encryptForStorage(secret, installUuid) });
+const plaintext = decryptFromStorage(readSecureStoreSecret({ service, account }).secret, installUuid);
+deleteSecureStoreSecret({ service, account }); // on disconnect
 ```
 
-The `google-identity` display record (`email`, `name`, `picture`, `expiresAt`) is the **only** exception — stored as plain JSON because it contains no token values and must be readable before `installUuid` is available at early launch.
+The `google-identity` display record (`email`, `name`, `picture`, `expiresAt`) contains no token values and may be stored as plain JSON (still kept inside the OS secure store).
 
 ### 12.2 Tool Execution Sandbox
 
@@ -938,31 +936,29 @@ If the user gets a new machine and reinstalls Mindfly, signing in with the same 
 
 #### 12.5.5 Files to create/modify
 
-- **`src/gateway/google-identity.ts`** — wraps PKCE flow, calls `USERINFO_URL`, reads/writes identity from Keychain, exports `getGoogleIdentity()` / `signInWithGoogle()` / `refreshGoogleToken()`
-- **`apps/macos/Sources/OpenClaw/GoogleAuth.swift`** — `ASWebAuthenticationSession` wrapper, posts result to gateway via IPC
-- **`apps/windows/google-auth.ts`** — Electron: `shell.openExternal(authUrl)` + local redirect server on `localhost:51121`, captures code, forwards to `google-identity.ts`
+- **`src/gateway/google-identity.ts`** — PKCE flow + local loopback callback server, exchanges tokens, fetches `userinfo`, stores tokens + identity in the OS secure store (via `src/infra/secure-store.ts`)
+- **`apps/macos/Sources/OpenClaw/GoogleAuth.swift`** — optional `ASWebAuthenticationSession` wrapper for native sign-in UX (not required for the web Control UI flow)
+- **`apps/windows/src/google-auth.ts`** — Electron scaffold helper to open the Google auth URL in the system browser
 - **Onboarding** — new Step 0 (Google sign-in screen) inserted before the current Step 1; progress stepper updated from 5 to 6 dots
-- **Settings → Account** (new section) — avatar pulled from `picture` field, email, "Switch account" link (re-runs PKCE), link to Google privacy policy
-- **`src/gateway/google-identity.ts`** called at gateway startup to validate token is fresh
+- **Settings → Integrations** (new section) — Google identity (email/avatar) + sign-out + provider API key management (keys stored securely)
+- **Gateway token** — generated once per install and stored in the OS secure store (`src/gateway/mindfly-gateway-token.ts`)
 - **`src/security/storage-crypto.ts`** — new file: `encryptForStorage` / `decryptFromStorage` (see §12.5.6)
-- **`package.json`** — add `node-machine-id` to `dependencies` (used by `storage-crypto.ts` for hardware-bound key derivation; version: `^3.0.0`)
 
 #### 12.5.6 Encryption at rest for all stored secrets
 
 The OS Keychain / Credential Manager already encrypts values at the OS level (macOS Keychain: AES-256-GCM internally; Windows Credential Manager: DPAPI, per-user scope). This provides strong baseline protection.
 
-**Mindfly adds an application-layer encryption wrapper** (`encryptForStorage` / `decryptFromStorage`) applied to every secret _before_ it is handed to `keytar`. This means even a tool that can read raw Credential Manager entries (e.g. a misconfigured script using `cmdkey /list`) only receives ciphertext:
+**Mindfly adds an application-layer encryption wrapper** (`encryptForStorage` / `decryptFromStorage`) applied to every secret _before_ it is handed to the OS secure store. This means even a tool that can read raw Credential Manager entries (e.g. a misconfigured script using `cmdkey /list`) only receives ciphertext:
 
 ```ts
 // src/security/storage-crypto.ts
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
-import { machineIdSync } from "node-machine-id";
 
 // Machine-unique key derived from hardware ID + install UUID
-// Install UUID is generated once at first launch and stored in app config (not Keychain)
+// Install UUID is generated once at first launch and stored on disk as a non-secret identifier.
 function deriveMachineKey(installUuid: string): Buffer {
-  const machineId = machineIdSync({ original: true });
+  const machineId = resolveMachineId(); // platform-native (macOS ioreg IOPlatformUUID, Windows MachineGuid, Linux /etc/machine-id)
   const salt = Buffer.from("mindfly-v1-salt:" + installUuid, "utf8");
   return scryptSync(machineId, salt, 32); // 256-bit key
 }
@@ -990,19 +986,19 @@ export function decryptFromStorage(stored: string, installUuid: string): string 
 
 **What is encrypted before Keychain storage:**
 
-| Keychain entry                              | Encrypted?                                 |
-| ------------------------------------------- | ------------------------------------------ |
-| `mindfly / google-access-token`             | ✅ AES-256-GCM before `keytar.setPassword` |
-| `mindfly / google-refresh-token`            | ✅ AES-256-GCM before `keytar.setPassword` |
-| `mindfly / gateway-token`                   | ✅ AES-256-GCM before `keytar.setPassword` |
-| `mindfly / google-identity` (metadata only) | Plain JSON — not a secret; no token values |
-| User API keys (Anthropic, OpenAI, etc.)     | ✅ AES-256-GCM before `keytar.setPassword` |
+| Secure store entry (service / account)                                   | Encrypted? |
+| ------------------------------------------------------------------------ | ---------- |
+| `mindfly / google-access-token`                                          | ✅ AES-256-GCM before secure-store write |
+| `mindfly / google-refresh-token`                                         | ✅ AES-256-GCM before secure-store write |
+| `mindfly / gateway-token`                                                | ✅ AES-256-GCM before secure-store write |
+| `mindfly / google-identity` (metadata only)                              | Plain JSON — not a secret; no token values |
+| `ai.openclaw.auth-profiles / auth-profile:<provider>:default:api-key`    | ✅ AES-256-GCM before secure-store write |
 
 **Key derivation properties:**
 
 - Key = `scrypt(machineId, salt, 32)` — hardware-bound; different on every machine
 - `installUuid` is included in the salt — different per install even on the same machine
-- `machineId` via `node-machine-id` (macOS: IOPlatformSerialNumber; Windows: MachineGuid from registry)
+- `machineId` via platform-native sources (macOS: `IOPlatformUUID` from `ioreg`; Windows: `MachineGuid` from registry; Linux: `/etc/machine-id`)
 - Without the correct machine ID + install UUID, the ciphertext cannot be decrypted
 - Ensures that credential export to a different machine does not leak secrets
 

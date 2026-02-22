@@ -48,9 +48,10 @@ describe("gateway broadcaster", () => {
     const { broadcast } = createGatewayBroadcaster({ clients });
 
     broadcast("exec.approval.requested", { id: "1" });
+    broadcast("tool.approval.requested", { id: "2" });
     broadcast("device.pair.requested", { requestId: "r1" });
 
-    expect(approvalsSocket.send).toHaveBeenCalledTimes(1);
+    expect(approvalsSocket.send).toHaveBeenCalledTimes(2);
     expect(pairingSocket.send).toHaveBeenCalledTimes(1);
     expect(readSocket.send).toHaveBeenCalledTimes(0);
   });

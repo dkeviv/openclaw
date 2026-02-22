@@ -3,6 +3,16 @@
 - Repo: https://github.com/openclaw/openclaw
 - GitHub issues/comments/PR comments: use literal multiline strings or `-F - <<'EOF'` (or $'...') for real newlines; never embed "\\n".
 
+## Critical: Code Quality & UX (Mindfly / Consumer UX)
+
+These are **non-negotiable** expectations for any agent or contributor working on Mindfly-facing UX and core safety/security:
+
+- **Code quality:** follow existing patterns, keep changes small and composable, avoid `any`, keep types strict, and add brief comments only where logic is non-obvious.
+- **Refactoring discipline:** proactively look for adjacent refactoring opportunities that reduce duplication/complexity **without** changing behavior. Apply only refactors that are test-covered (or add coverage). If a refactor is large/risky, capture it as a tracked follow-up instead of doing churn.
+- **No functionality loss:** for any non-trivial change, validate with `pnpm lint && pnpm build && pnpm test` (start with the smallest relevant test target, then broaden before finalizing).
+- **UX bar (critical):** match Claude.ai / Claude cowork-level polish: modern, minimal, fast, and accessible. Clear state, spacing, typography, and tool/approval affordances. Do **not** copy Claude branding/palette.
+- **Theme & brand:** use a distinct Mindfly theme with a primary accent color derived from the Mindfly **butterfly** icon. If the canonical hex values/design tokens are not present in-repo, ask for them (or add a placeholder token like `--mindfly-accent` and thread it through).
+
 ## Project Structure & Module Organization
 
 - Source code: `src/` (CLI wiring in `src/cli`, commands in `src/commands`, web provider in `src/provider-web.ts`, infra in `src/infra`, media pipeline in `src/media`).

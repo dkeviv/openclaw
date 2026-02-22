@@ -9,6 +9,7 @@ import { formatAuthDoctorHint } from "./doctor.js";
 import { ensureAuthStoreFile, resolveAuthStorePath } from "./paths.js";
 import { suggestOAuthProfileIdForLegacyDefault } from "./repair.js";
 import { ensureAuthProfileStore, saveAuthProfileStore } from "./store.js";
+import { resolveAuthProfileSecret } from "./secure-store.js";
 import type { AuthProfileStore } from "./types.js";
 
 function buildOAuthApiKey(provider: string, credentials: OAuthCredentials): string {
@@ -40,28 +41,35 @@ async function refreshOAuthTokenWithLock(params: {
       return null;
     }
 
+    const access = resolveAuthProfileSecret(cred.access);
+    const refresh = resolveAuthProfileSecret(cred.refresh);
+
     if (Date.now() < cred.expires) {
       return {
-        apiKey: buildOAuthApiKey(cred.provider, cred),
-        newCredentials: cred,
+        apiKey: buildOAuthApiKey(cred.provider, { ...cred, access, refresh }),
+        newCredentials: { ...cred, access, refresh },
       };
     }
 
     const oauthCreds: Record<string, OAuthCredentials> = {
-      [cred.provider]: cred,
+      [cred.provider]: { ...cred, access, refresh },
     };
 
     const result =
       String(cred.provider) === "chutes"
         ? await (async () => {
             const newCredentials = await refreshChutesTokens({
-              credential: cred,
+              credential: { ...cred, access, refresh },
             });
             return { apiKey: newCredentials.access, newCredentials };
           })()
         : String(cred.provider) === "qwen-portal"
           ? await (async () => {
-              const newCredentials = await refreshQwenPortalCredentials(cred);
+              const newCredentials = await refreshQwenPortalCredentials({
+                ...cred,
+                access,
+                refresh,
+              });
               return { apiKey: newCredentials.access, newCredentials };
             })()
           : await getOAuthApiKey(cred.provider, oauthCreds);
@@ -107,8 +115,10 @@ async function tryResolveOAuthProfile(params: {
   }
 
   if (Date.now() < cred.expires) {
+    const access = resolveAuthProfileSecret(cred.access);
+    const refresh = resolveAuthProfileSecret(cred.refresh);
     return {
-      apiKey: buildOAuthApiKey(cred.provider, cred),
+      apiKey: buildOAuthApiKey(cred.provider, { ...cred, access, refresh }),
       provider: cred.provider,
       email: cred.email,
     };
@@ -151,10 +161,14 @@ export async function resolveApiKeyForProfile(params: {
   }
 
   if (cred.type === "api_key") {
-    return { apiKey: cred.key, provider: cred.provider, email: cred.email };
+    return {
+      apiKey: resolveAuthProfileSecret(cred.key),
+      provider: cred.provider,
+      email: cred.email,
+    };
   }
   if (cred.type === "token") {
-    const token = cred.token?.trim();
+    const token = resolveAuthProfileSecret(cred.token).trim();
     if (!token) {
       return null;
     }
@@ -168,9 +182,12 @@ export async function resolveApiKeyForProfile(params: {
     }
     return { apiKey: token, provider: cred.provider, email: cred.email };
   }
+  const access = resolveAuthProfileSecret(cred.access);
+  const refresh = resolveAuthProfileSecret(cred.refresh);
+
   if (Date.now() < cred.expires) {
     return {
-      apiKey: buildOAuthApiKey(cred.provider, cred),
+      apiKey: buildOAuthApiKey(cred.provider, { ...cred, access, refresh }),
       provider: cred.provider,
       email: cred.email,
     };
@@ -193,8 +210,10 @@ export async function resolveApiKeyForProfile(params: {
     const refreshedStore = ensureAuthProfileStore(params.agentDir);
     const refreshed = refreshedStore.profiles[profileId];
     if (refreshed?.type === "oauth" && Date.now() < refreshed.expires) {
+      const access = resolveAuthProfileSecret(refreshed.access);
+      const refresh = resolveAuthProfileSecret(refreshed.refresh);
       return {
-        apiKey: buildOAuthApiKey(refreshed.provider, refreshed),
+        apiKey: buildOAuthApiKey(refreshed.provider, { ...refreshed, access, refresh }),
         provider: refreshed.provider,
         email: refreshed.email ?? cred.email,
       };
@@ -236,7 +255,11 @@ export async function resolveApiKeyForProfile(params: {
             expires: new Date(mainCred.expires).toISOString(),
           });
           return {
-            apiKey: buildOAuthApiKey(mainCred.provider, mainCred),
+            apiKey: buildOAuthApiKey(mainCred.provider, {
+              ...mainCred,
+              access: resolveAuthProfileSecret(mainCred.access),
+              refresh: resolveAuthProfileSecret(mainCred.refresh),
+            }),
             provider: mainCred.provider,
             email: mainCred.email,
           };

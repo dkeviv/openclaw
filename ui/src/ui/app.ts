@@ -30,6 +30,7 @@ import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals";
 import type { DevicePairingList } from "./controllers/devices";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
+import type { ToolApprovalRequest } from "./controllers/tool-approval";
 import {
   resetToolStream as resetToolStreamInternal,
   type ToolStreamEntry,
@@ -79,6 +80,9 @@ import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./contro
 declare global {
   interface Window {
     __OPENCLAW_CONTROL_UI_BASE_PATH__?: string;
+    __OPENCLAW_BRAND__?: string;
+    __MINDFLY_ACCENT__?: string;
+    __OPENCLAW_GATEWAY_TOKEN__?: string;
   }
 }
 
@@ -93,12 +97,127 @@ function resolveOnboardingMode(): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
+type UiBrand = "openclaw" | "mindfly";
+
+function resolveBrandMode(): UiBrand {
+  if (typeof window === "undefined") return "openclaw";
+  const params = new URLSearchParams(window.location.search ?? "");
+  const rawParam = (params.get("brand") ?? params.get("product") ?? "").trim().toLowerCase();
+  const rawInjected = (window.__OPENCLAW_BRAND__ ?? "").trim().toLowerCase();
+  const raw = rawParam || rawInjected;
+  return raw === "mindfly" ? "mindfly" : "openclaw";
+}
+
+function resolveMindflyAccent(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search ?? "");
+  const rawParam = (params.get("accent") ?? "").trim();
+  const rawInjected = (window.__MINDFLY_ACCENT__ ?? "").trim();
+  const raw = rawParam || rawInjected;
+  return raw ? raw : null;
+}
+
+function parseHexColor(value: string): { r: number; g: number; b: number } | null {
+  const trimmed = value.trim();
+  const hex = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return null;
+  }
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+    return null;
+  }
+  return { r, g, b };
+}
+
+function clampByte(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function rgbToHex(rgb: { r: number; g: number; b: number }): string {
+  const to2 = (n: number) => clampByte(n).toString(16).padStart(2, "0");
+  return `#${to2(rgb.r)}${to2(rgb.g)}${to2(rgb.b)}`;
+}
+
+function lighten(rgb: { r: number; g: number; b: number }, amount: number): { r: number; g: number; b: number } {
+  const a = Math.max(0, Math.min(1, amount));
+  return {
+    r: rgb.r + (255 - rgb.r) * a,
+    g: rgb.g + (255 - rgb.g) * a,
+    b: rgb.b + (255 - rgb.b) * a,
+  };
+}
+
+function rgba(rgb: { r: number; g: number; b: number }, alpha: number): string {
+  const a = Math.max(0, Math.min(1, alpha));
+  return `rgba(${clampByte(rgb.r)}, ${clampByte(rgb.g)}, ${clampByte(rgb.b)}, ${a})`;
+}
+
+function applyBrandTheme(brand: UiBrand, accent: string | null) {
+  const root = document.documentElement;
+  root.dataset.brand = brand;
+  if (brand !== "mindfly") {
+    return;
+  }
+  const base = parseHexColor(accent ?? "") ?? parseHexColor("#7C5CFF");
+  if (!base) return;
+  const hover = lighten(base, 0.1);
+  root.style.setProperty("--mindfly-accent", rgbToHex(base));
+  root.style.setProperty("--accent", rgbToHex(base));
+  root.style.setProperty("--primary", rgbToHex(base));
+  root.style.setProperty("--ring", rgbToHex(base));
+  root.style.setProperty("--accent-hover", rgbToHex(hover));
+  root.style.setProperty("--accent-muted", rgbToHex(base));
+  root.style.setProperty("--accent-subtle", rgba(base, 0.15));
+  root.style.setProperty("--accent-glow", rgba(base, 0.25));
+  root.style.setProperty("--focus", rgba(base, 0.25));
+}
+
 @customElement("openclaw-app")
 export class OpenClawApp extends LitElement {
   @state() settings: UiSettings = loadSettings();
   @state() password = "";
   @state() tab: Tab = "chat";
   @state() onboarding = resolveOnboardingMode();
+  @state() brand: UiBrand = resolveBrandMode();
+  @state() mindflyAccent: string | null = resolveMindflyAccent();
+  @state() mindflyIdentity: {
+    email: string;
+    name?: string;
+    picture?: string;
+    id?: string;
+    expiresAtMs: number;
+  } | null = null;
+  @state() mindflyIdentityLoading = false;
+  @state() mindflyIdentityError: string | null = null;
+  @state() mindflyAuthBusy = false;
+
+  @state() mindflyProviders: Array<{ id: string; label: string; configured: boolean }> = [];
+  @state() mindflyProvidersLoading = false;
+  @state() mindflyProvidersError: string | null = null;
+  @state() mindflyApiKeyProvider = "anthropic";
+  @state() mindflyApiKey = "";
+  @state() mindflyApiKeySaving = false;
+  @state() mindflyApiKeyError: string | null = null;
+
+  @state() mindflyModels: Array<{ id: string; name: string; provider: string }> = [];
+  @state() mindflyModelsLoading = false;
+  @state() mindflyModelsError: string | null = null;
+
+  @state() mindflyOnboardingStep = 0;
+  @state() mindflyOnboardingBrowserEnabled = true;
+  @state() mindflyOnboardingProvider = "anthropic";
+  @state() mindflyOnboardingApiKey = "";
+  @state() mindflyOnboardingModel = "";
+  @state() mindflyOnboardingAssistantName = "Assistant";
+  @state() mindflyOnboardingAssistantAvatar = "🦋";
+  @state() mindflyOnboardingBusy = false;
+  @state() mindflyOnboardingError: string | null = null;
+  @state() mindflyOnboardingFinishing = false;
+  @state() mindflyOnboardingFinishRequested = false;
   @state() connected = false;
   @state() theme: ThemeMode = this.settings.theme ?? "system";
   @state() themeResolved: ResolvedTheme = "dark";
@@ -149,6 +268,9 @@ export class OpenClawApp extends LitElement {
   @state() execApprovalQueue: ExecApprovalRequest[] = [];
   @state() execApprovalBusy = false;
   @state() execApprovalError: string | null = null;
+  @state() toolApprovalQueue: ToolApprovalRequest[] = [];
+  @state() toolApprovalBusy = false;
+  @state() toolApprovalError: string | null = null;
   @state() pendingGatewayUrl: string | null = null;
 
   @state() configLoading = false;
@@ -273,6 +395,7 @@ export class OpenClawApp extends LitElement {
   }
 
   protected firstUpdated() {
+    applyBrandTheme(this.brand, this.mindflyAccent);
     handleFirstUpdated(this as unknown as Parameters<typeof handleFirstUpdated>[0]);
   }
 
@@ -283,6 +406,20 @@ export class OpenClawApp extends LitElement {
 
   protected updated(changed: Map<PropertyKey, unknown>) {
     handleUpdated(this as unknown as Parameters<typeof handleUpdated>[0], changed);
+    if (changed.has("connected") && this.connected && this.brand === "mindfly") {
+      void this.refreshMindflyState();
+      if (this.mindflyOnboardingFinishRequested) {
+        this.mindflyOnboardingFinishRequested = false;
+        this.mindflyOnboardingFinishing = false;
+        try {
+          localStorage.setItem("mindfly.onboardingSeen.v1", "1");
+        } catch {
+          // ignore storage errors
+        }
+        this.onboarding = false;
+        this.setTab("chat");
+      }
+    }
   }
 
   connect() {
@@ -317,6 +454,245 @@ export class OpenClawApp extends LitElement {
 
   async loadAssistantIdentity() {
     await loadAssistantIdentityInternal(this);
+  }
+
+  private async refreshMindflyState() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    await Promise.all([this.loadMindflyIdentity(), this.loadMindflyProviders()]);
+    if (!this.mindflyIdentity) {
+      this.onboarding = true;
+      this.mindflyOnboardingStep = 0;
+    }
+  }
+
+  private normalizeMindflyIdentity(value: unknown) {
+    if (!value || typeof value !== "object") return null;
+    const rec = value as Record<string, unknown>;
+    const email = typeof rec.email === "string" ? rec.email.trim() : "";
+    const expiresAtMs =
+      typeof rec.expiresAtMs === "number" && Number.isFinite(rec.expiresAtMs) ? rec.expiresAtMs : 0;
+    if (!email || expiresAtMs <= 0) return null;
+    const name = typeof rec.name === "string" && rec.name.trim() ? rec.name.trim() : undefined;
+    const picture =
+      typeof rec.picture === "string" && rec.picture.trim() ? rec.picture.trim() : undefined;
+    const id = typeof rec.id === "string" && rec.id.trim() ? rec.id.trim() : undefined;
+    return { email, expiresAtMs, ...(name ? { name } : {}), ...(picture ? { picture } : {}), ...(id ? { id } : {}) };
+  }
+
+  async loadMindflyIdentity() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyIdentityLoading = true;
+    this.mindflyIdentityError = null;
+    try {
+      const res = (await this.client.request("mindfly.google.identity.get", {})) as
+        | { identity?: unknown }
+        | undefined;
+      const identity = this.normalizeMindflyIdentity(res?.identity ?? null);
+      this.mindflyIdentity = identity;
+    } catch (err) {
+      this.mindflyIdentity = null;
+      this.mindflyIdentityError = String(err);
+    } finally {
+      this.mindflyIdentityLoading = false;
+    }
+  }
+
+  async mindflyGoogleSignIn() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyAuthBusy = true;
+    this.mindflyIdentityError = null;
+    try {
+      const started = (await this.client.request("mindfly.google.signin.start", {})) as
+        | { sessionId?: unknown; authUrl?: unknown }
+        | undefined;
+      const sessionId = typeof started?.sessionId === "string" ? started.sessionId.trim() : "";
+      const authUrl = typeof started?.authUrl === "string" ? started.authUrl.trim() : "";
+      if (!sessionId || !authUrl) {
+        throw new Error("google sign-in did not return an auth URL");
+      }
+      const popup = window.open(authUrl, "_blank", "noopener,noreferrer");
+      if (!popup) {
+        this.mindflyIdentityError = `Popup blocked. Open this URL to continue:\n${authUrl}`;
+      }
+      const waited = (await this.client.request("mindfly.google.signin.wait", {
+        sessionId,
+        timeoutMs: 5 * 60 * 1000,
+      })) as { identity?: unknown } | undefined;
+      const identity = this.normalizeMindflyIdentity(waited?.identity ?? null);
+      if (!identity) {
+        throw new Error("google sign-in completed but identity was missing");
+      }
+      this.mindflyIdentity = identity;
+      this.mindflyOnboardingStep = Math.max(this.mindflyOnboardingStep, 1);
+    } catch (err) {
+      this.mindflyIdentityError = String(err);
+    } finally {
+      this.mindflyAuthBusy = false;
+    }
+  }
+
+  async mindflyGoogleSignOut() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyAuthBusy = true;
+    this.mindflyIdentityError = null;
+    try {
+      await this.client.request("mindfly.google.signout", {});
+      this.mindflyIdentity = null;
+    } catch (err) {
+      this.mindflyIdentityError = String(err);
+    } finally {
+      this.mindflyAuthBusy = false;
+    }
+  }
+
+  async loadMindflyProviders() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyProvidersLoading = true;
+    this.mindflyProvidersError = null;
+    try {
+      const res = (await this.client.request("mindfly.integrations.providers.list", {})) as
+        | { providers?: unknown }
+        | undefined;
+      const list = Array.isArray(res?.providers) ? (res?.providers as unknown[]) : [];
+      const providers = list
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const rec = entry as Record<string, unknown>;
+          const id = typeof rec.id === "string" ? rec.id.trim() : "";
+          const label = typeof rec.label === "string" ? rec.label.trim() : "";
+          const configured = rec.configured === true;
+          if (!id || !label) return null;
+          return { id, label, configured };
+        })
+        .filter(Boolean) as Array<{ id: string; label: string; configured: boolean }>;
+      this.mindflyProviders = providers;
+      if (!providers.some((p) => p.id === this.mindflyApiKeyProvider)) {
+        this.mindflyApiKeyProvider = providers[0]?.id ?? this.mindflyApiKeyProvider;
+      }
+    } catch (err) {
+      this.mindflyProvidersError = String(err);
+    } finally {
+      this.mindflyProvidersLoading = false;
+    }
+  }
+
+  async mindflySaveApiKey(provider?: string, apiKey?: string) {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyApiKeySaving = true;
+    this.mindflyApiKeyError = null;
+    try {
+      const targetProvider = (provider ?? this.mindflyApiKeyProvider).trim();
+      const key = (apiKey ?? this.mindflyApiKey).trim();
+      if (!targetProvider || !key) {
+        throw new Error("provider and api key are required");
+      }
+      await this.client.request("mindfly.integrations.provider.apiKey.set", {
+        provider: targetProvider,
+        apiKey: key,
+      });
+      this.mindflyApiKey = "";
+      this.mindflyOnboardingApiKey = "";
+      this.mindflyOnboardingProvider = targetProvider;
+      await this.loadMindflyProviders();
+    } catch (err) {
+      this.mindflyApiKeyError = String(err);
+      this.mindflyOnboardingError = String(err);
+    } finally {
+      this.mindflyApiKeySaving = false;
+    }
+  }
+
+  async mindflyClearApiKey(provider: string) {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    const ok = window.confirm(`Remove the stored API key for ${provider}?`);
+    if (!ok) return;
+    this.mindflyApiKeySaving = true;
+    this.mindflyApiKeyError = null;
+    try {
+      await this.client.request("mindfly.integrations.provider.apiKey.clear", { provider });
+      await this.loadMindflyProviders();
+    } catch (err) {
+      this.mindflyApiKeyError = String(err);
+    } finally {
+      this.mindflyApiKeySaving = false;
+    }
+  }
+
+  async loadMindflyModels() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyModelsLoading = true;
+    this.mindflyModelsError = null;
+    try {
+      const res = (await this.client.request("models.list", {})) as { models?: unknown } | undefined;
+      const list = Array.isArray(res?.models) ? (res.models as unknown[]) : [];
+      const models = list
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const rec = entry as Record<string, unknown>;
+          const id = typeof rec.id === "string" ? rec.id.trim() : "";
+          const name = typeof rec.name === "string" ? rec.name.trim() : "";
+          const provider = typeof rec.provider === "string" ? rec.provider.trim() : "";
+          if (!id || !name || !provider) return null;
+          return { id, name, provider };
+        })
+        .filter(Boolean) as Array<{ id: string; name: string; provider: string }>;
+      this.mindflyModels = models;
+    } catch (err) {
+      this.mindflyModelsError = String(err);
+    } finally {
+      this.mindflyModelsLoading = false;
+    }
+  }
+
+  async mindflyFinishOnboarding() {
+    if (this.brand !== "mindfly") return;
+    if (!this.client || !this.connected) return;
+    this.mindflyOnboardingFinishing = true;
+    this.mindflyOnboardingError = null;
+    try {
+      const snapshot = (await this.client.request("config.get", {})) as
+        | { exists?: unknown; hash?: unknown }
+        | undefined;
+      const baseHash = typeof snapshot?.hash === "string" ? snapshot.hash.trim() : undefined;
+      const patch = {
+        ui: {
+          seamColor: this.mindflyAccent ?? undefined,
+          assistant: {
+            name: this.mindflyOnboardingAssistantName.trim() || undefined,
+            avatar: this.mindflyOnboardingAssistantAvatar.trim() || undefined,
+          },
+        },
+        browser: {
+          enabled: this.mindflyOnboardingBrowserEnabled,
+          evaluateEnabled: false,
+        },
+        agents: {
+          defaults: {
+            model: {
+              primary: this.mindflyOnboardingModel.trim() || undefined,
+            },
+          },
+        },
+      };
+      const raw = JSON.stringify(patch, null, 2);
+      await this.client.request("config.patch", {
+        raw,
+        ...(baseHash ? { baseHash } : {}),
+        note: "Mindfly onboarding",
+      });
+      this.mindflyOnboardingFinishRequested = true;
+    } catch (err) {
+      this.mindflyOnboardingError = String(err);
+      this.mindflyOnboardingFinishing = false;
+    }
   }
 
   applySettings(next: UiSettings) {
@@ -420,6 +796,24 @@ export class OpenClawApp extends LitElement {
       this.execApprovalError = `Exec approval failed: ${String(err)}`;
     } finally {
       this.execApprovalBusy = false;
+    }
+  }
+
+  async handleToolApprovalDecision(decision: "allow-once" | "allow-always" | "deny") {
+    const active = this.toolApprovalQueue[0];
+    if (!active || !this.client || this.toolApprovalBusy) return;
+    this.toolApprovalBusy = true;
+    this.toolApprovalError = null;
+    try {
+      await this.client.request("tool.approval.resolve", {
+        id: active.id,
+        decision,
+      });
+      this.toolApprovalQueue = this.toolApprovalQueue.filter((entry) => entry.id !== active.id);
+    } catch (err) {
+      this.toolApprovalError = `Tool approval failed: ${String(err)}`;
+    } finally {
+      this.toolApprovalBusy = false;
     }
   }
 

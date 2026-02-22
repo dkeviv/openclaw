@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { OpenClawConfig } from "../config/config.js";
+import { isMindflyBrand } from "../infra/brand.js";
 import { DEFAULT_ASSISTANT_IDENTITY, resolveAssistantIdentity } from "./assistant-identity.js";
 import {
   buildControlUiAvatarUrl,
@@ -18,6 +19,7 @@ export type ControlUiRequestOptions = {
   basePath?: string;
   config?: OpenClawConfig;
   agentId?: string;
+  gatewayToken?: string;
 };
 
 function resolveControlUiRoot(): string | null {
@@ -178,10 +180,13 @@ interface ControlUiInjectionOpts {
   basePath: string;
   assistantName?: string;
   assistantAvatar?: string;
+  brand?: "openclaw" | "mindfly";
+  mindflyAccent?: string;
+  gatewayToken?: string;
 }
 
 function injectControlUiConfig(html: string, opts: ControlUiInjectionOpts): string {
-  const { basePath, assistantName, assistantAvatar } = opts;
+  const { basePath, assistantName, assistantAvatar, brand, mindflyAccent, gatewayToken } = opts;
   const script =
     `<script>` +
     `window.__OPENCLAW_CONTROL_UI_BASE_PATH__=${JSON.stringify(basePath)};` +
@@ -191,6 +196,11 @@ function injectControlUiConfig(html: string, opts: ControlUiInjectionOpts): stri
     `window.__OPENCLAW_ASSISTANT_AVATAR__=${JSON.stringify(
       assistantAvatar ?? DEFAULT_ASSISTANT_IDENTITY.avatar,
     )};` +
+    `window.__OPENCLAW_BRAND__=${JSON.stringify(brand ?? "openclaw")};` +
+    `window.__MINDFLY_ACCENT__=${JSON.stringify(mindflyAccent ?? "")};` +
+    (brand === "mindfly" && gatewayToken
+      ? `window.__OPENCLAW_GATEWAY_TOKEN__=${JSON.stringify(gatewayToken)};`
+      : ``) +
     `</script>`;
   // Check if already injected
   if (html.includes("__OPENCLAW_ASSISTANT_NAME__")) {
@@ -207,10 +217,11 @@ interface ServeIndexHtmlOpts {
   basePath: string;
   config?: OpenClawConfig;
   agentId?: string;
+  gatewayToken?: string;
 }
 
 function serveIndexHtml(res: ServerResponse, indexPath: string, opts: ServeIndexHtmlOpts) {
-  const { basePath, config, agentId } = opts;
+  const { basePath, config, agentId, gatewayToken } = opts;
   const identity = config
     ? resolveAssistantIdentity({ cfg: config, agentId })
     : DEFAULT_ASSISTANT_IDENTITY;
@@ -224,6 +235,13 @@ function serveIndexHtml(res: ServerResponse, indexPath: string, opts: ServeIndex
       agentId: resolvedAgentId,
       basePath,
     }) ?? identity.avatar;
+  const brand: "openclaw" | "mindfly" = isMindflyBrand(process.env) ? "mindfly" : "openclaw";
+  const mindflyAccent =
+    typeof process.env.MINDFLY_ACCENT === "string" && process.env.MINDFLY_ACCENT.trim()
+      ? process.env.MINDFLY_ACCENT.trim()
+      : typeof config?.ui?.seamColor === "string" && config.ui.seamColor.trim()
+        ? config.ui.seamColor.trim()
+        : "#7C5CFF";
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   const raw = fs.readFileSync(indexPath, "utf8");
@@ -232,6 +250,9 @@ function serveIndexHtml(res: ServerResponse, indexPath: string, opts: ServeIndex
       basePath,
       assistantName: identity.name,
       assistantAvatar: avatarValue,
+      brand,
+      mindflyAccent: brand === "mindfly" ? mindflyAccent : "",
+      gatewayToken: brand === "mindfly" ? gatewayToken : undefined,
     }),
   );
 }
@@ -330,6 +351,7 @@ export function handleControlUiHttpRequest(
         basePath,
         config: opts?.config,
         agentId: opts?.agentId,
+        gatewayToken: opts?.gatewayToken,
       });
       return true;
     }
@@ -344,6 +366,7 @@ export function handleControlUiHttpRequest(
       basePath,
       config: opts?.config,
       agentId: opts?.agentId,
+      gatewayToken: opts?.gatewayToken,
     });
     return true;
   }

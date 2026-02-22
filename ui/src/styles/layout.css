@@ -50,14 +50,24 @@
 
 .shell--onboarding {
   grid-template-rows: 0 1fr;
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .shell--onboarding .topbar {
   display: none;
 }
 
+.shell--onboarding .nav {
+  display: none;
+}
+
 .shell--onboarding .content {
   padding-top: 0;
+  align-items: center;
+}
+
+.shell--onboarding .content-header {
+  display: none;
 }
 
 .shell--chat-focus .content {

@@ -42,7 +42,10 @@ import { renderNodes } from "./views/nodes";
 import { renderOverview } from "./views/overview";
 import { renderSessions } from "./views/sessions";
 import { renderExecApprovalPrompt } from "./views/exec-approval";
+import { renderToolApprovalPrompt } from "./views/tool-approval";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation";
+import { renderIntegrations } from "./views/integrations";
+import { renderMindflyOnboarding } from "./views/mindfly-onboarding";
 import {
   approveDevicePairing,
   loadDevices,
@@ -110,10 +113,13 @@ export function renderApp(state: AppViewState) {
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
   const chatDisabledReason = state.connected ? null : "Disconnected from gateway.";
   const isChat = state.tab === "chat";
+  const isMindflyOnboarding = state.brand === "mindfly" && state.onboarding;
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const assistantAvatarUrl = resolveAssistantAvatarUrl(state);
   const chatAvatarUrl = state.chatAvatarUrl ?? assistantAvatarUrl ?? null;
+  const brandTitle = state.brand === "mindfly" ? "MINDFLY" : "OPENCLAW";
+  const brandSubtitle = state.brand === "mindfly" ? "Consumer Gateway" : "Gateway Dashboard";
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
@@ -133,11 +139,24 @@ export function renderApp(state: AppViewState) {
           </button>
           <div class="brand">
             <div class="brand-logo">
-              <img src="https://mintcdn.com/clawhub/4rYvG-uuZrMK_URE/assets/pixel-lobster.svg?fit=max&auto=format&n=4rYvG-uuZrMK_URE&q=85&s=da2032e9eac3b5d9bfe7eb96ca6a8a26" alt="OpenClaw" />
+              ${
+                state.brand === "mindfly"
+                  ? html`<div
+                      style="width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--accent-subtle); color: var(--accent);"
+                      aria-label="Mindfly"
+                      title="Mindfly"
+                    >
+                      🦋
+                    </div>`
+                  : html`<img
+                      src="https://mintcdn.com/clawhub/4rYvG-uuZrMK_URE/assets/pixel-lobster.svg?fit=max&auto=format&n=4rYvG-uuZrMK_URE&q=85&s=da2032e9eac3b5d9bfe7eb96ca6a8a26"
+                      alt="OpenClaw"
+                    />`
+              }
             </div>
             <div class="brand-text">
-              <div class="brand-title">OPENCLAW</div>
-              <div class="brand-sub">Gateway Dashboard</div>
+              <div class="brand-title">${brandTitle}</div>
+              <div class="brand-sub">${brandSubtitle}</div>
             </div>
           </div>
         </div>
@@ -207,8 +226,45 @@ export function renderApp(state: AppViewState) {
           </div>
         </section>
 
+        ${isMindflyOnboarding
+          ? renderMindflyOnboarding({
+              connected: state.connected,
+              identity: state.mindflyIdentity,
+              identityLoading: state.mindflyIdentityLoading,
+              identityError: state.mindflyIdentityError,
+              authBusy: state.mindflyAuthBusy,
+              onGoogleSignIn: () => state.mindflyGoogleSignIn(),
+              providers: state.mindflyProviders,
+              providersLoading: state.mindflyProvidersLoading,
+              providersError: state.mindflyProvidersError,
+              onProvidersRefresh: () => state.loadMindflyProviders(),
+              onApiKeySave: (provider, apiKey) => state.mindflySaveApiKey(provider, apiKey),
+              models: state.mindflyModels,
+              modelsLoading: state.mindflyModelsLoading,
+              modelsError: state.mindflyModelsError,
+              onModelsLoad: () => state.loadMindflyModels(),
+              step: state.mindflyOnboardingStep,
+              setStep: (next) => (state.mindflyOnboardingStep = next),
+              browserEnabled: state.mindflyOnboardingBrowserEnabled,
+              setBrowserEnabled: (next) => (state.mindflyOnboardingBrowserEnabled = next),
+              provider: state.mindflyOnboardingProvider,
+              setProvider: (next) => (state.mindflyOnboardingProvider = next),
+              apiKey: state.mindflyOnboardingApiKey,
+              setApiKey: (next) => (state.mindflyOnboardingApiKey = next),
+              model: state.mindflyOnboardingModel,
+              setModel: (next) => (state.mindflyOnboardingModel = next),
+              assistantName: state.mindflyOnboardingAssistantName,
+              setAssistantName: (next) => (state.mindflyOnboardingAssistantName = next),
+              assistantAvatar: state.mindflyOnboardingAssistantAvatar,
+              setAssistantAvatar: (next) => (state.mindflyOnboardingAssistantAvatar = next),
+              error: state.mindflyOnboardingError,
+              finishing: state.mindflyOnboardingFinishing,
+              onFinish: () => state.mindflyFinishOnboarding(),
+            })
+          : nothing}
+
         ${
-          state.tab === "overview"
+          !isMindflyOnboarding && state.tab === "overview"
             ? renderOverview({
                 connected: state.connected,
                 hello: state.hello,
@@ -240,7 +296,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "channels"
+          !isMindflyOnboarding && state.tab === "channels"
             ? renderChannels({
                 connected: state.connected,
                 loading: state.channelsLoading,
@@ -279,7 +335,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "instances"
+          !isMindflyOnboarding && state.tab === "instances"
             ? renderInstances({
                 loading: state.presenceLoading,
                 entries: state.presenceEntries,
@@ -291,7 +347,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "sessions"
+          !isMindflyOnboarding && state.tab === "sessions"
             ? renderSessions({
                 loading: state.sessionsLoading,
                 result: state.sessionsResult,
@@ -315,7 +371,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "cron"
+          !isMindflyOnboarding && state.tab === "cron"
             ? renderCron({
                 loading: state.cronLoading,
                 status: state.cronStatus,
@@ -442,7 +498,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "chat"
+          !isMindflyOnboarding && state.tab === "chat"
             ? renderChat({
                 sessionKey: state.sessionKey,
                 onSessionKeyChange: (next) => {
@@ -517,7 +573,34 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "config"
+          !isMindflyOnboarding && state.tab === "integrations"
+            ? renderIntegrations({
+                brand: state.brand,
+                connected: state.connected,
+                identity: state.mindflyIdentity,
+                identityLoading: state.mindflyIdentityLoading,
+                identityError: state.mindflyIdentityError,
+                authBusy: state.mindflyAuthBusy,
+                onGoogleSignIn: () => state.mindflyGoogleSignIn(),
+                onGoogleSignOut: () => state.mindflyGoogleSignOut(),
+                onGoogleRefresh: () => state.loadMindflyIdentity(),
+                providers: state.mindflyProviders,
+                providersLoading: state.mindflyProvidersLoading,
+                providersError: state.mindflyProvidersError,
+                apiKeyProvider: state.mindflyApiKeyProvider,
+                apiKey: state.mindflyApiKey,
+                apiKeySaving: state.mindflyApiKeySaving,
+                apiKeyError: state.mindflyApiKeyError,
+                onApiKeyProviderChange: (next) => (state.mindflyApiKeyProvider = next),
+                onApiKeyChange: (next) => (state.mindflyApiKey = next),
+                onApiKeySave: () => state.mindflySaveApiKey(),
+                onApiKeyClear: (provider) => state.mindflyClearApiKey(provider),
+              })
+            : nothing
+        }
+
+        ${
+          !isMindflyOnboarding && state.tab === "config"
             ? renderConfig({
                 raw: state.configRaw,
                 originalRaw: state.configRawOriginal,
@@ -557,7 +640,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "debug"
+          !isMindflyOnboarding && state.tab === "debug"
             ? renderDebug({
                 loading: state.debugLoading,
                 status: state.debugStatus,
@@ -578,7 +661,7 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "logs"
+          !isMindflyOnboarding && state.tab === "logs"
             ? renderLogs({
                 loading: state.logsLoading,
                 error: state.logsError,
@@ -600,7 +683,8 @@ export function renderApp(state: AppViewState) {
             : nothing
         }
       </main>
-      ${renderExecApprovalPrompt(state)}
+      ${renderToolApprovalPrompt(state)}
+      ${state.toolApprovalQueue.length > 0 ? nothing : renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}
     </div>
   `;

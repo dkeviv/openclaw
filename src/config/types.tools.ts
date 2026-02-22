@@ -332,6 +332,32 @@ export type ToolsConfig = {
   deny?: string[];
   /** Optional tool policy overrides keyed by provider id or "provider/model". */
   byProvider?: Record<string, ToolPolicyConfig>;
+  safety?: {
+    /**
+     * Wrap externally sourced tool text in explicit untrusted boundaries before it reaches the model.
+     * This is a defense-in-depth prompt injection mitigation (see src/security/external-content.ts).
+     */
+    wrapExternalContent?: {
+      /** Enable wrapping (default: true). */
+      enabled?: boolean;
+      /** Include the full warning block (default: true when enabled). */
+      includeWarning?: boolean;
+    };
+    /**
+     * Tool-level approvals beyond exec (file + browser). Intended for Mindfly.
+     * When enabled, tools may block waiting for an approval decision and default-deny on timeout.
+     */
+    toolApprovals?: {
+      /** Enable tool approvals enforcement (default: false in OpenClaw, true for Mindfly). */
+      enabled?: boolean;
+      /** Approval timeout (ms) before default-deny. Default: 120000. */
+      timeoutMs?: number;
+      /** File tool approval mode. Default: "on-new-path" when enabled. */
+      fileMode?: "off" | "on-new-path" | "always";
+      /** Browser approval mode. Default: "per-session" when enabled. */
+      browserMode?: "off" | "per-session" | "always";
+    };
+  };
   web?: {
     search?: {
       /** Enable web search tool (default: true when API key is present). */

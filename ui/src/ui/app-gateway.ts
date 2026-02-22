@@ -18,8 +18,15 @@ import {
   parseExecApprovalResolved,
   removeExecApproval,
 } from "./controllers/exec-approval";
+import {
+  addToolApproval,
+  parseToolApprovalRequested,
+  parseToolApprovalResolved,
+  removeToolApproval,
+} from "./controllers/tool-approval";
 import type { OpenClawApp } from "./app";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
+import type { ToolApprovalRequest } from "./controllers/tool-approval";
 import { loadAssistantIdentity } from "./controllers/assistant-identity";
 import { loadSessions } from "./controllers/sessions";
 
@@ -49,6 +56,8 @@ type GatewayHost = {
   refreshSessionsAfterChat: Set<string>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
+  toolApprovalQueue: ToolApprovalRequest[];
+  toolApprovalError: string | null;
 };
 
 type SessionDefaultsSnapshot = {
@@ -238,6 +247,28 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     if (resolved) {
       host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, resolved.id);
     }
+    return;
+  }
+
+  if (evt.event === "tool.approval.requested") {
+    const entry = parseToolApprovalRequested(evt.payload);
+    if (entry) {
+      host.toolApprovalQueue = addToolApproval(host.toolApprovalQueue, entry);
+      host.toolApprovalError = null;
+      const delay = Math.max(0, entry.expiresAtMs - Date.now() + 500);
+      window.setTimeout(() => {
+        host.toolApprovalQueue = removeToolApproval(host.toolApprovalQueue, entry.id);
+      }, delay);
+    }
+    return;
+  }
+
+  if (evt.event === "tool.approval.resolved") {
+    const resolved = parseToolApprovalResolved(evt.payload);
+    if (resolved) {
+      host.toolApprovalQueue = removeToolApproval(host.toolApprovalQueue, resolved.id);
+    }
+    return;
   }
 }
 

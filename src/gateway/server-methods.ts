@@ -9,6 +9,7 @@ import { connectHandlers } from "./server-methods/connect.js";
 import { cronHandlers } from "./server-methods/cron.js";
 import { deviceHandlers } from "./server-methods/devices.js";
 import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
+import { toolApprovalsHandlers } from "./server-methods/tool-approvals.js";
 import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
 import { modelsHandlers } from "./server-methods/models.js";
@@ -25,6 +26,7 @@ import { usageHandlers } from "./server-methods/usage.js";
 import { voicewakeHandlers } from "./server-methods/voicewake.js";
 import { webHandlers } from "./server-methods/web.js";
 import { wizardHandlers } from "./server-methods/wizard.js";
+import { mindflyHandlers } from "./server-methods/mindfly.js";
 
 const ADMIN_SCOPE = "operator.admin";
 const READ_SCOPE = "operator.read";
@@ -32,7 +34,12 @@ const WRITE_SCOPE = "operator.write";
 const APPROVALS_SCOPE = "operator.approvals";
 const PAIRING_SCOPE = "operator.pairing";
 
-const APPROVAL_METHODS = new Set(["exec.approval.request", "exec.approval.resolve"]);
+const APPROVAL_METHODS = new Set([
+  "exec.approval.request",
+  "exec.approval.resolve",
+  "tool.approval.request",
+  "tool.approval.resolve",
+]);
 const NODE_ROLE_METHODS = new Set(["node.invoke.result", "node.event", "skills.bins"]);
 const PAIRING_METHODS = new Set([
   "node.pair.request",
@@ -47,7 +54,7 @@ const PAIRING_METHODS = new Set([
   "device.token.revoke",
   "node.rename",
 ]);
-const ADMIN_METHOD_PREFIXES = ["exec.approvals."];
+const ADMIN_METHOD_PREFIXES = ["exec.approvals.", "tool.approvals."];
 const READ_METHODS = new Set([
   "health",
   "logs.tail",
@@ -72,6 +79,8 @@ const READ_METHODS = new Set([
   "node.list",
   "node.describe",
   "chat.history",
+  "mindfly.google.identity.get",
+  "mindfly.integrations.providers.list",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -88,6 +97,11 @@ const WRITE_METHODS = new Set([
   "chat.send",
   "chat.abort",
   "browser.request",
+  "mindfly.google.signin.start",
+  "mindfly.google.signin.wait",
+  "mindfly.google.signout",
+  "mindfly.integrations.provider.apiKey.set",
+  "mindfly.integrations.provider.apiKey.clear",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -169,6 +183,8 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...cronHandlers,
   ...deviceHandlers,
   ...execApprovalsHandlers,
+  ...toolApprovalsHandlers,
+  ...mindflyHandlers,
   ...webHandlers,
   ...modelsHandlers,
   ...configHandlers,

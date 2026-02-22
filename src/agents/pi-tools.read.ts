@@ -2,6 +2,7 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 
 import { detectMime } from "../media/mime.js";
+import { wrapExternalContent } from "../security/external-content.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
@@ -269,9 +270,12 @@ function wrapSandboxPathGuard(tool: AnyAgentTool, root: string): AnyAgentTool {
   };
 }
 
-export function createSandboxedReadTool(root: string) {
+export function createSandboxedReadTool(
+  root: string,
+  options?: { wrapExternalContent?: { enabled?: boolean; includeWarning?: boolean } },
+) {
   const base = createReadTool(root) as unknown as AnyAgentTool;
-  return wrapSandboxPathGuard(createOpenClawReadTool(base), root);
+  return wrapSandboxPathGuard(createOpenClawReadTool(base, options), root);
 }
 
 export function createSandboxedWriteTool(root: string) {
@@ -284,8 +288,16 @@ export function createSandboxedEditTool(root: string) {
   return wrapSandboxPathGuard(wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.edit), root);
 }
 
-export function createOpenClawReadTool(base: AnyAgentTool): AnyAgentTool {
+export function createOpenClawReadTool(
+  base: AnyAgentTool,
+  options?: {
+    wrapExternalContent?: { enabled?: boolean; includeWarning?: boolean };
+  },
+): AnyAgentTool {
   const patched = patchToolSchemaForClaudeCompatibility(base);
+  const wrapConfig = options?.wrapExternalContent;
+  const wrapExternal = wrapConfig?.enabled !== false;
+  const wrapWarning = wrapConfig?.includeWarning !== false;
   return {
     ...patched,
     execute: async (toolCallId, params, signal) => {
@@ -297,7 +309,32 @@ export function createOpenClawReadTool(base: AnyAgentTool): AnyAgentTool {
       const result = await base.execute(toolCallId, normalized ?? params, signal);
       const filePath = typeof record?.path === "string" ? String(record.path) : "<unknown>";
       const normalizedResult = await normalizeReadImageResult(result, filePath);
-      return sanitizeToolResultImages(normalizedResult, `read:${filePath}`);
+      const sanitized = await sanitizeToolResultImages(normalizedResult, `read:${filePath}`);
+      if (!wrapExternal) {
+        return sanitized;
+      }
+      const content = Array.isArray(sanitized.content) ? sanitized.content : [];
+      let warned = false;
+      const wrappedContent = content.map((block) => {
+        if (!block || typeof block !== "object" || (block as { type?: unknown }).type !== "text") {
+          return block;
+        }
+        const text = (block as { text?: unknown }).text;
+        if (typeof text !== "string" || !text) {
+          return block;
+        }
+        const wrapped = wrapExternalContent(text, {
+          source: "unknown",
+          sender: filePath,
+          includeWarning: warned ? false : wrapWarning,
+        });
+        warned = true;
+        return { ...(block as TextContentBlock), text: wrapped };
+      });
+      return {
+        ...sanitized,
+        content: wrappedContent,
+      };
     },
   };
 }

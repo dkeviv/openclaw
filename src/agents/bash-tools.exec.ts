@@ -56,6 +56,7 @@ import { listNodes, resolveNodeIdFromList } from "./tools/nodes-utils.js";
 import { getShellConfig, sanitizeBinaryOutput } from "./shell-utils.js";
 import { buildCursorPositionResponse, stripDsrRequests } from "./pty-dsr.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
+import { scrubInheritedSensitiveEnv } from "../security/sensitive-env.js";
 
 const DEFAULT_MAX_OUTPUT = clampNumber(
   readEnvInt("PI_BASH_MAX_OUTPUT_CHARS"),
@@ -917,6 +918,7 @@ export function createExecTool(
       }
 
       const baseEnv = coerceEnv(process.env);
+      scrubInheritedSensitiveEnv(baseEnv, { keepIfProvided: params.env });
       const mergedEnv = params.env ? { ...baseEnv, ...params.env } : baseEnv;
       const env = sandbox
         ? buildSandboxEnv({

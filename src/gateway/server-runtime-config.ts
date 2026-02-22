@@ -12,6 +12,8 @@ import {
 import { normalizeControlUiBasePath } from "./control-ui-shared.js";
 import { resolveHooksConfig } from "./hooks.js";
 import { isLoopbackHost, resolveGatewayBindHost } from "./net.js";
+import { isMindflyBrand } from "../infra/brand.js";
+import { resolveMindflyGatewayToken } from "./mindfly-gateway-token.js";
 
 export type GatewayRuntimeConfig = {
   bindHost: string;
@@ -39,9 +41,15 @@ export async function resolveGatewayRuntimeConfig(params: {
   auth?: GatewayAuthConfig;
   tailscale?: GatewayTailscaleConfig;
 }): Promise<GatewayRuntimeConfig> {
-  const bindMode = params.bind ?? params.cfg.gateway?.bind ?? "loopback";
+  let bindMode = params.bind ?? params.cfg.gateway?.bind ?? "loopback";
+  if (isMindflyBrand(process.env)) {
+    // Consumer app: always loopback-only.
+    bindMode = "loopback";
+  }
   const customBindHost = params.cfg.gateway?.customBindHost;
-  const bindHost = params.host ?? (await resolveGatewayBindHost(bindMode, customBindHost));
+  const bindHost = isMindflyBrand(process.env)
+    ? await resolveGatewayBindHost("loopback", undefined)
+    : (params.host ?? (await resolveGatewayBindHost(bindMode, customBindHost)));
   const controlUiEnabled =
     params.controlUiEnabled ?? params.cfg.gateway?.controlUi?.enabled ?? true;
   const openAiChatCompletionsEnabled =
@@ -53,10 +61,18 @@ export async function resolveGatewayRuntimeConfig(params: {
   const controlUiBasePath = normalizeControlUiBasePath(params.cfg.gateway?.controlUi?.basePath);
   const authBase = params.cfg.gateway?.auth ?? {};
   const authOverrides = params.auth ?? {};
-  const authConfig = {
+  let authConfig: GatewayAuthConfig = {
     ...authBase,
     ...authOverrides,
   };
+  if (isMindflyBrand(process.env)) {
+    authConfig = {
+      ...authConfig,
+      mode: "token",
+      token: resolveMindflyGatewayToken(),
+      password: undefined,
+    };
+  }
   const tailscaleBase = params.cfg.gateway?.tailscale ?? {};
   const tailscaleOverrides = params.tailscale ?? {};
   const tailscaleConfig = {

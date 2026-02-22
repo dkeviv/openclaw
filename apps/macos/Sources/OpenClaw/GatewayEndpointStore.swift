@@ -635,13 +635,17 @@ extension GatewayEndpointStore {
         }
         components.path = "/"
         var queryItems: [URLQueryItem] = []
+        let env = ProcessInfo.processInfo.environment
+        let isMindfly = env["OPENCLAW_BRAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mindfly"
         if let token = config.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !token.isEmpty
+           !token.isEmpty,
+           !isMindfly
         {
             queryItems.append(URLQueryItem(name: "token", value: token))
         }
         if let password = config.password?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !password.isEmpty
+           !password.isEmpty,
+           !isMindfly
         {
             queryItems.append(URLQueryItem(name: "password", value: password))
         }

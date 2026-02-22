@@ -50,6 +50,7 @@ import {
 } from "./tool-policy.js";
 import { getPluginToolMeta } from "../plugins/tools.js";
 import { logWarn } from "../logger.js";
+import { ensureFileToolApproval } from "./tool-approvals.js";
 
 function isOpenAIProvider(provider?: string) {
   const normalized = provider?.trim().toLowerCase();
@@ -224,6 +225,7 @@ export function createOpenClawCodingTools(options?: {
   const sandboxRoot = sandbox?.workspaceDir;
   const allowWorkspaceWrites = sandbox?.workspaceAccess !== "ro";
   const workspaceRoot = options?.workspaceDir ?? process.cwd();
+  const wrapExternalContentConfig = options?.config?.tools?.safety?.wrapExternalContent;
   const applyPatchConfig = options?.config?.tools?.exec?.applyPatch;
   const applyPatchEnabled =
     !!applyPatchConfig?.enabled &&
@@ -234,13 +236,87 @@ export function createOpenClawCodingTools(options?: {
       allowModels: applyPatchConfig?.allowModels,
     });
 
+  const toolSessionKey = options?.sessionKey ?? null;
+
+  const readWriteToolPath = (args: unknown): string | null => {
+    const normalized = normalizeToolParams(args);
+    const record =
+      normalized ??
+      (args && typeof args === "object" ? (args as Record<string, unknown>) : undefined);
+    const candidate = record?.path ?? record?.file_path;
+    if (typeof candidate !== "string") {
+      return null;
+    }
+    const trimmed = candidate.trim();
+    return trimmed ? trimmed : null;
+  };
+
+  const wrapFileApproval = (
+    tool: AnyAgentTool,
+    params: {
+      toolGroup: "fs.read" | "fs.write";
+      cwd: string;
+      sandboxRoot?: string;
+      summaryLabel: string;
+      extractPaths: (args: unknown) => string[];
+    },
+  ): AnyAgentTool => ({
+    ...tool,
+    execute: async (toolCallId, args, signal, onUpdate) => {
+      const paths = params.extractPaths(args);
+      const summary =
+        paths.length > 0
+          ? `${params.summaryLabel}: ${paths[0]}${paths.length > 1 ? " (+" + (paths.length - 1) + ")" : ""}`
+          : params.summaryLabel;
+      await ensureFileToolApproval({
+        config: options?.config,
+        toolName: tool.name,
+        toolGroup: params.toolGroup,
+        cwd: params.cwd,
+        sandboxRoot: params.sandboxRoot,
+        sessionKey: toolSessionKey,
+        agentId: agentId ?? null,
+        paths,
+        summary,
+      });
+      return tool.execute(toolCallId, args, signal, onUpdate);
+    },
+  });
+
   const base = (codingTools as unknown as AnyAgentTool[]).flatMap((tool) => {
     if (tool.name === readTool.name) {
       if (sandboxRoot) {
-        return [createSandboxedReadTool(sandboxRoot)];
+        const readTool = createSandboxedReadTool(sandboxRoot, {
+          wrapExternalContent: wrapExternalContentConfig,
+        });
+        return [
+          wrapFileApproval(readTool, {
+            toolGroup: "fs.read",
+            cwd: sandboxRoot,
+            sandboxRoot,
+            summaryLabel: "Read file",
+            extractPaths: (args) => {
+              const p = readWriteToolPath(args);
+              return p ? [p] : [];
+            },
+          }),
+        ];
       }
       const freshReadTool = createReadTool(workspaceRoot);
-      return [createOpenClawReadTool(freshReadTool)];
+      const openclawReadTool = createOpenClawReadTool(freshReadTool, {
+        wrapExternalContent: wrapExternalContentConfig,
+      });
+      return [
+        wrapFileApproval(openclawReadTool, {
+          toolGroup: "fs.read",
+          cwd: workspaceRoot,
+          summaryLabel: "Read file",
+          extractPaths: (args) => {
+            const p = readWriteToolPath(args);
+            return p ? [p] : [];
+          },
+        }),
+      ];
     }
     if (tool.name === "bash" || tool.name === execToolName) {
       return [];
@@ -250,8 +326,20 @@ export function createOpenClawCodingTools(options?: {
         return [];
       }
       // Wrap with param normalization for Claude Code compatibility
+      const writeTool = wrapToolParamNormalization(
+        createWriteTool(workspaceRoot),
+        CLAUDE_PARAM_GROUPS.write,
+      );
       return [
-        wrapToolParamNormalization(createWriteTool(workspaceRoot), CLAUDE_PARAM_GROUPS.write),
+        wrapFileApproval(writeTool, {
+          toolGroup: "fs.write",
+          cwd: workspaceRoot,
+          summaryLabel: "Write file",
+          extractPaths: (args) => {
+            const p = readWriteToolPath(args);
+            return p ? [p] : [];
+          },
+        }),
       ];
     }
     if (tool.name === "edit") {
@@ -259,7 +347,21 @@ export function createOpenClawCodingTools(options?: {
         return [];
       }
       // Wrap with param normalization for Claude Code compatibility
-      return [wrapToolParamNormalization(createEditTool(workspaceRoot), CLAUDE_PARAM_GROUPS.edit)];
+      const editTool = wrapToolParamNormalization(
+        createEditTool(workspaceRoot),
+        CLAUDE_PARAM_GROUPS.edit,
+      );
+      return [
+        wrapFileApproval(editTool, {
+          toolGroup: "fs.write",
+          cwd: workspaceRoot,
+          summaryLabel: "Edit file",
+          extractPaths: (args) => {
+            const p = readWriteToolPath(args);
+            return p ? [p] : [];
+          },
+        }),
+      ];
     }
     return [tool];
   });
@@ -299,15 +401,72 @@ export function createOpenClawCodingTools(options?: {
   const applyPatchTool =
     !applyPatchEnabled || (sandboxRoot && !allowWorkspaceWrites)
       ? null
-      : createApplyPatchTool({
-          cwd: sandboxRoot ?? workspaceRoot,
-          sandboxRoot: sandboxRoot && allowWorkspaceWrites ? sandboxRoot : undefined,
-        });
+      : wrapFileApproval(
+          createApplyPatchTool({
+            cwd: sandboxRoot ?? workspaceRoot,
+            sandboxRoot: sandboxRoot && allowWorkspaceWrites ? sandboxRoot : undefined,
+          }) as unknown as AnyAgentTool,
+          {
+            toolGroup: "fs.write",
+            cwd: sandboxRoot ?? workspaceRoot,
+            sandboxRoot: sandboxRoot && allowWorkspaceWrites ? sandboxRoot : undefined,
+            summaryLabel: "Apply patch",
+            extractPaths: (args) => {
+              const input = (args as { input?: unknown } | undefined)?.input;
+              if (typeof input !== "string") {
+                return [];
+              }
+              const lines = input.split(/\r?\n/);
+              const paths: string[] = [];
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith("*** Add File: ")) {
+                  paths.push(trimmed.slice("*** Add File: ".length).trim());
+                  continue;
+                }
+                if (trimmed.startsWith("*** Update File: ")) {
+                  paths.push(trimmed.slice("*** Update File: ".length).trim());
+                  continue;
+                }
+                if (trimmed.startsWith("*** Delete File: ")) {
+                  paths.push(trimmed.slice("*** Delete File: ".length).trim());
+                  continue;
+                }
+                if (trimmed.startsWith("*** Move to: ")) {
+                  paths.push(trimmed.slice("*** Move to: ".length).trim());
+                  continue;
+                }
+              }
+              return paths.filter((p) => p.trim());
+            },
+          },
+        );
   const tools: AnyAgentTool[] = [
     ...base,
     ...(sandboxRoot
       ? allowWorkspaceWrites
-        ? [createSandboxedEditTool(sandboxRoot), createSandboxedWriteTool(sandboxRoot)]
+        ? [
+            wrapFileApproval(createSandboxedEditTool(sandboxRoot), {
+              toolGroup: "fs.write",
+              cwd: sandboxRoot,
+              sandboxRoot,
+              summaryLabel: "Edit file",
+              extractPaths: (args) => {
+                const p = readWriteToolPath(args);
+                return p ? [p] : [];
+              },
+            }),
+            wrapFileApproval(createSandboxedWriteTool(sandboxRoot), {
+              toolGroup: "fs.write",
+              cwd: sandboxRoot,
+              sandboxRoot,
+              summaryLabel: "Write file",
+              extractPaths: (args) => {
+                const p = readWriteToolPath(args);
+                return p ? [p] : [];
+              },
+            }),
+          ]
         : []
       : []),
     ...(applyPatchTool ? [applyPatchTool as unknown as AnyAgentTool] : []),

@@ -462,6 +462,27 @@ export const ToolsSchema = z
     alsoAllow: z.array(z.string()).optional(),
     deny: z.array(z.string()).optional(),
     byProvider: z.record(z.string(), ToolPolicyWithProfileSchema).optional(),
+    safety: z
+      .object({
+        wrapExternalContent: z
+          .object({
+            enabled: z.boolean().optional(),
+            includeWarning: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
+        toolApprovals: z
+          .object({
+            enabled: z.boolean().optional(),
+            timeoutMs: z.number().optional(),
+            fileMode: z.enum(["off", "on-new-path", "always"]).optional(),
+            browserMode: z.enum(["off", "per-session", "always"]).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     web: ToolsWebSchema,
     media: ToolsMediaSchema,
     links: ToolsLinksSchema,

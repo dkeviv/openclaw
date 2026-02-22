@@ -83,6 +83,14 @@ import {
   ExecApprovalRequestParamsSchema,
   type ExecApprovalResolveParams,
   ExecApprovalResolveParamsSchema,
+  type ToolApprovalsGetParams,
+  ToolApprovalsGetParamsSchema,
+  type ToolApprovalsSetParams,
+  ToolApprovalsSetParamsSchema,
+  type ToolApprovalRequestParams,
+  ToolApprovalRequestParamsSchema,
+  type ToolApprovalResolveParams,
+  ToolApprovalResolveParamsSchema,
   ErrorCodes,
   type ErrorShape,
   ErrorShapeSchema,
@@ -173,6 +181,20 @@ import {
   WebLoginStartParamsSchema,
   type WebLoginWaitParams,
   WebLoginWaitParamsSchema,
+  type MindflyGoogleIdentityGetParams,
+  MindflyGoogleIdentityGetParamsSchema,
+  type MindflyGoogleSignInStartParams,
+  MindflyGoogleSignInStartParamsSchema,
+  type MindflyGoogleSignInWaitParams,
+  MindflyGoogleSignInWaitParamsSchema,
+  type MindflyGoogleSignOutParams,
+  MindflyGoogleSignOutParamsSchema,
+  type MindflyIntegrationsProvidersListParams,
+  MindflyIntegrationsProvidersListParamsSchema,
+  type MindflyIntegrationsProviderSetApiKeyParams,
+  MindflyIntegrationsProviderSetApiKeyParamsSchema,
+  type MindflyIntegrationsProviderClearApiKeyParams,
+  MindflyIntegrationsProviderClearApiKeyParamsSchema,
   type WizardCancelParams,
   WizardCancelParamsSchema,
   type WizardNextParams,
@@ -309,6 +331,18 @@ export const validateExecApprovalsNodeGetParams = ajv.compile<ExecApprovalsNodeG
 export const validateExecApprovalsNodeSetParams = ajv.compile<ExecApprovalsNodeSetParams>(
   ExecApprovalsNodeSetParamsSchema,
 );
+export const validateToolApprovalsGetParams = ajv.compile<ToolApprovalsGetParams>(
+  ToolApprovalsGetParamsSchema,
+);
+export const validateToolApprovalsSetParams = ajv.compile<ToolApprovalsSetParams>(
+  ToolApprovalsSetParamsSchema,
+);
+export const validateToolApprovalRequestParams = ajv.compile<ToolApprovalRequestParams>(
+  ToolApprovalRequestParamsSchema,
+);
+export const validateToolApprovalResolveParams = ajv.compile<ToolApprovalResolveParams>(
+  ToolApprovalResolveParamsSchema,
+);
 export const validateLogsTailParams = ajv.compile<LogsTailParams>(LogsTailParamsSchema);
 export const validateChatHistoryParams = ajv.compile(ChatHistoryParamsSchema);
 export const validateChatSendParams = ajv.compile(ChatSendParamsSchema);
@@ -319,6 +353,28 @@ export const validateUpdateRunParams = ajv.compile<UpdateRunParams>(UpdateRunPar
 export const validateWebLoginStartParams =
   ajv.compile<WebLoginStartParams>(WebLoginStartParamsSchema);
 export const validateWebLoginWaitParams = ajv.compile<WebLoginWaitParams>(WebLoginWaitParamsSchema);
+export const validateMindflyGoogleIdentityGetParams = ajv.compile<MindflyGoogleIdentityGetParams>(
+  MindflyGoogleIdentityGetParamsSchema,
+);
+export const validateMindflyGoogleSignInStartParams = ajv.compile<MindflyGoogleSignInStartParams>(
+  MindflyGoogleSignInStartParamsSchema,
+);
+export const validateMindflyGoogleSignInWaitParams = ajv.compile<MindflyGoogleSignInWaitParams>(
+  MindflyGoogleSignInWaitParamsSchema,
+);
+export const validateMindflyGoogleSignOutParams = ajv.compile<MindflyGoogleSignOutParams>(
+  MindflyGoogleSignOutParamsSchema,
+);
+export const validateMindflyIntegrationsProvidersListParams =
+  ajv.compile<MindflyIntegrationsProvidersListParams>(MindflyIntegrationsProvidersListParamsSchema);
+export const validateMindflyIntegrationsProviderSetApiKeyParams =
+  ajv.compile<MindflyIntegrationsProviderSetApiKeyParams>(
+    MindflyIntegrationsProviderSetApiKeyParamsSchema,
+  );
+export const validateMindflyIntegrationsProviderClearApiKeyParams =
+  ajv.compile<MindflyIntegrationsProviderClearApiKeyParams>(
+    MindflyIntegrationsProviderClearApiKeyParamsSchema,
+  );
 
 export function formatValidationErrors(errors: ErrorObject[] | null | undefined) {
   if (!errors?.length) {
@@ -407,6 +463,13 @@ export {
   ChannelsLogoutParamsSchema,
   WebLoginStartParamsSchema,
   WebLoginWaitParamsSchema,
+  MindflyGoogleIdentityGetParamsSchema,
+  MindflyGoogleSignInStartParamsSchema,
+  MindflyGoogleSignInWaitParamsSchema,
+  MindflyGoogleSignOutParamsSchema,
+  MindflyIntegrationsProvidersListParamsSchema,
+  MindflyIntegrationsProviderSetApiKeyParamsSchema,
+  MindflyIntegrationsProviderClearApiKeyParamsSchema,
   AgentSummarySchema,
   AgentsListParamsSchema,
   AgentsListResultSchema,
@@ -481,6 +544,13 @@ export type {
   ChannelsLogoutParams,
   WebLoginStartParams,
   WebLoginWaitParams,
+  MindflyGoogleIdentityGetParams,
+  MindflyGoogleSignInStartParams,
+  MindflyGoogleSignInWaitParams,
+  MindflyGoogleSignOutParams,
+  MindflyIntegrationsProvidersListParams,
+  MindflyIntegrationsProviderSetApiKeyParams,
+  MindflyIntegrationsProviderClearApiKeyParams,
   AgentSummary,
   AgentsListParams,
   AgentsListResult,

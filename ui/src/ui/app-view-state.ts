@@ -25,6 +25,7 @@ import type { SkillMessage } from "./controllers/skills";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals";
 import type { DevicePairingList } from "./controllers/devices";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
+import type { ToolApprovalRequest } from "./controllers/tool-approval";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form";
 
 export type AppViewState = {
@@ -32,6 +33,37 @@ export type AppViewState = {
   password: string;
   tab: Tab;
   onboarding: boolean;
+  brand: "openclaw" | "mindfly";
+  mindflyAccent: string | null;
+  mindflyIdentity: {
+    email: string;
+    name?: string;
+    picture?: string;
+    id?: string;
+    expiresAtMs: number;
+  } | null;
+  mindflyIdentityLoading: boolean;
+  mindflyIdentityError: string | null;
+  mindflyAuthBusy: boolean;
+  mindflyProviders: Array<{ id: string; label: string; configured: boolean }>;
+  mindflyProvidersLoading: boolean;
+  mindflyProvidersError: string | null;
+  mindflyApiKeyProvider: string;
+  mindflyApiKey: string;
+  mindflyApiKeySaving: boolean;
+  mindflyApiKeyError: string | null;
+  mindflyModels: Array<{ id: string; name: string; provider: string }>;
+  mindflyModelsLoading: boolean;
+  mindflyModelsError: string | null;
+  mindflyOnboardingStep: number;
+  mindflyOnboardingBrowserEnabled: boolean;
+  mindflyOnboardingProvider: string;
+  mindflyOnboardingApiKey: string;
+  mindflyOnboardingModel: string;
+  mindflyOnboardingAssistantName: string;
+  mindflyOnboardingAssistantAvatar: string;
+  mindflyOnboardingFinishing: boolean;
+  mindflyOnboardingError: string | null;
   basePath: string;
   connected: boolean;
   theme: ThemeMode;
@@ -70,6 +102,9 @@ export type AppViewState = {
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalBusy: boolean;
   execApprovalError: string | null;
+  toolApprovalQueue: ToolApprovalRequest[];
+  toolApprovalBusy: boolean;
+  toolApprovalError: string | null;
   pendingGatewayUrl: string | null;
   configLoading: boolean;
   configRaw: string;
@@ -163,6 +198,7 @@ export type AppViewState = {
   handleNostrProfileImport: () => Promise<void>;
   handleNostrProfileToggleAdvanced: () => void;
   handleExecApprovalDecision: (decision: "allow-once" | "allow-always" | "deny") => Promise<void>;
+  handleToolApprovalDecision: (decision: "allow-once" | "allow-always" | "deny") => Promise<void>;
   handleGatewayUrlConfirm: () => void;
   handleGatewayUrlCancel: () => void;
   handleConfigLoad: () => Promise<void>;
@@ -191,6 +227,14 @@ export type AppViewState = {
   handleLoadLogs: () => Promise<void>;
   handleDebugCall: () => Promise<void>;
   handleRunUpdate: () => Promise<void>;
+  loadMindflyIdentity: () => Promise<void>;
+  mindflyGoogleSignIn: () => Promise<void>;
+  mindflyGoogleSignOut: () => Promise<void>;
+  loadMindflyProviders: () => Promise<void>;
+  mindflySaveApiKey: (provider?: string, apiKey?: string) => Promise<void>;
+  mindflyClearApiKey: (provider: string) => Promise<void>;
+  loadMindflyModels: () => Promise<void>;
+  mindflyFinishOnboarding: () => Promise<void>;
   setPassword: (next: string) => void;
   setSessionKey: (next: string) => void;
   setChatMessage: (next: string) => void;

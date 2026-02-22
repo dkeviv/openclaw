@@ -1,9 +1,10 @@
 import { Type } from "@sinclair/typebox";
 
 import type { OpenClawConfig } from "../../config/config.js";
+import { wrapExternalContent } from "../../security/external-content.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readNumberParam, readStringParam } from "./common.js";
+import { readNumberParam, readStringParam } from "./common.js";
 import {
   CacheEntry,
   DEFAULT_CACHE_TTL_MINUTES,
@@ -460,6 +461,9 @@ export function createWebSearchTool(options?: {
   if (!resolveSearchEnabled({ search, sandboxed: options?.sandboxed })) {
     return null;
   }
+  const wrapConfig = options?.config?.tools?.safety?.wrapExternalContent;
+  const wrapExternal = wrapConfig?.enabled !== false;
+  const wrapWarning = wrapConfig?.includeWarning !== false;
 
   const provider = resolveSearchProvider(search);
   const perplexityConfig = resolvePerplexityConfig(search);
@@ -481,7 +485,11 @@ export function createWebSearchTool(options?: {
         provider === "perplexity" ? perplexityAuth?.apiKey : resolveSearchApiKey(search);
 
       if (!apiKey) {
-        return jsonResult(missingSearchKeyPayload(provider));
+        const payload = missingSearchKeyPayload(provider);
+        return {
+          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+          details: payload,
+        };
       }
       const params = args as Record<string, unknown>;
       const query = readStringParam(params, "query", { required: true });
@@ -492,20 +500,28 @@ export function createWebSearchTool(options?: {
       const ui_lang = readStringParam(params, "ui_lang");
       const rawFreshness = readStringParam(params, "freshness");
       if (rawFreshness && provider !== "brave") {
-        return jsonResult({
+        const payload = {
           error: "unsupported_freshness",
           message: "freshness is only supported by the Brave web_search provider.",
           docs: "https://docs.openclaw.ai/tools/web",
-        });
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+          details: payload,
+        };
       }
       const freshness = rawFreshness ? normalizeFreshness(rawFreshness) : undefined;
       if (rawFreshness && !freshness) {
-        return jsonResult({
+        const payload = {
           error: "invalid_freshness",
           message:
             "freshness must be one of pd, pw, pm, py, or a range like YYYY-MM-DDtoYYYY-MM-DD.",
           docs: "https://docs.openclaw.ai/tools/web",
-        });
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+          details: payload,
+        };
       }
       const result = await runWebSearch({
         query,
@@ -525,7 +541,50 @@ export function createWebSearchTool(options?: {
         ),
         perplexityModel: resolvePerplexityModel(perplexityConfig),
       });
-      return jsonResult(result);
+      let contentResult = result;
+      if (wrapExternal) {
+        const warned = { value: false };
+        const payload = result;
+        const content = (payload as { content?: unknown }).content;
+        const results = (payload as { results?: unknown }).results;
+
+        if (typeof content === "string" && content) {
+          contentResult = {
+            ...payload,
+            content: wrapExternalContent(content, {
+              source: "api",
+              sender: "web_search",
+              includeWarning: wrapWarning,
+            }),
+          };
+        } else if (Array.isArray(results)) {
+          const nextResults = results.map((entry) => {
+            if (!entry || typeof entry !== "object") {
+              return entry;
+            }
+            const description = (entry as { description?: unknown }).description;
+            if (typeof description !== "string" || !description) {
+              return entry;
+            }
+            const url = (entry as { url?: unknown }).url;
+            const title = (entry as { title?: unknown }).title;
+            const wrapped = wrapExternalContent(description, {
+              source: "api",
+              sender: typeof url === "string" ? url : undefined,
+              subject: typeof title === "string" ? title : undefined,
+              includeWarning: warned.value ? false : wrapWarning,
+            });
+            warned.value = true;
+            return { ...(entry as Record<string, unknown>), description: wrapped };
+          });
+          contentResult = { ...payload, results: nextResults };
+        }
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(contentResult, null, 2) }],
+        details: result,
+      };
     },
   };
 }
