@@ -11,11 +11,22 @@ export type FinalizeInboundContextOptions = {
   forceConversationLabel?: boolean;
 };
 
+function sanitizeSpoofedSystemMessagePrefix(value: string): string {
+  const trimmed = value.trimStart();
+  if (!trimmed) return value;
+  // Treat user-provided "[System Message] ..." as untrusted content to prevent
+  // spoofing internal system-event semantics in model context.
+  if (/^\[\s*system\s+message\s*\]/i.test(trimmed)) {
+    return value.replace(/^(\s*)\[(\s*system\s+message\s*)\]/i, "$1[Untrusted message]");
+  }
+  return value;
+}
+
 function normalizeTextField(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-  return normalizeInboundTextNewlines(value);
+  return sanitizeSpoofedSystemMessagePrefix(normalizeInboundTextNewlines(value));
 }
 
 export function finalizeInboundContext<T extends Record<string, unknown>>(
@@ -24,8 +35,8 @@ export function finalizeInboundContext<T extends Record<string, unknown>>(
 ): T & FinalizedMsgContext {
   const normalized = ctx as T & MsgContext;
 
-  normalized.Body = normalizeInboundTextNewlines(
-    typeof normalized.Body === "string" ? normalized.Body : "",
+  normalized.Body = sanitizeSpoofedSystemMessagePrefix(
+    normalizeInboundTextNewlines(typeof normalized.Body === "string" ? normalized.Body : ""),
   );
   normalized.RawBody = normalizeTextField(normalized.RawBody);
   normalized.CommandBody = normalizeTextField(normalized.CommandBody);
@@ -40,7 +51,9 @@ export function finalizeInboundContext<T extends Record<string, unknown>>(
   const bodyForAgentSource = opts.forceBodyForAgent
     ? normalized.Body
     : (normalized.BodyForAgent ?? normalized.Body);
-  normalized.BodyForAgent = normalizeInboundTextNewlines(bodyForAgentSource);
+  normalized.BodyForAgent = sanitizeSpoofedSystemMessagePrefix(
+    normalizeInboundTextNewlines(bodyForAgentSource),
+  );
 
   const bodyForCommandsSource = opts.forceBodyForCommands
     ? (normalized.CommandBody ?? normalized.RawBody ?? normalized.Body)
@@ -48,7 +61,9 @@ export function finalizeInboundContext<T extends Record<string, unknown>>(
       normalized.CommandBody ??
       normalized.RawBody ??
       normalized.Body);
-  normalized.BodyForCommands = normalizeInboundTextNewlines(bodyForCommandsSource);
+  normalized.BodyForCommands = sanitizeSpoofedSystemMessagePrefix(
+    normalizeInboundTextNewlines(bodyForCommandsSource),
+  );
 
   const explicitLabel = normalized.ConversationLabel?.trim();
   if (opts.forceConversationLabel || !explicitLabel) {

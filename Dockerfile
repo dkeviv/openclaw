@@ -24,6 +24,8 @@ COPY scripts ./scripts
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+# Harden extension directory permissions (avoid world-writable perms in image layers).
+RUN mkdir -p /app/extensions && chmod 0755 /app/extensions && chmod -R go-w /app/extensions
 RUN OPENCLAW_A2UI_SKIP_MISSING=1 pnpm build
 # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
 ENV OPENCLAW_PREFER_PNPM=1
